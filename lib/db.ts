@@ -73,6 +73,17 @@ const SCHEMA = `
     synced_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     word_count INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    username   TEXT    NOT NULL,
+    message    TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS chat_messages_created_at
+    ON chat_messages (created_at);
 `;
 
 let db: Database.Database | null = null;

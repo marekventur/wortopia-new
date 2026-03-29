@@ -5,6 +5,7 @@ loadEnv();
 loadEnv({ path: ".env.local", override: true });
 loadEnv({ path: `.env.${process.env.NODE_ENV ?? "development"}.local`, override: true });
 
+import http from "http";
 import compression from "compression";
 import express from "express";
 import morgan from "morgan";
@@ -14,19 +15,18 @@ const DEVELOPMENT = process.env.NODE_ENV === "development";
 const PORT = Number.parseInt(process.env.PORT || "3000", 10);
 
 const app = express();
+const httpServer = http.createServer(app);
 
 app.use(compression());
 app.disable("x-powered-by");
 
 if (DEVELOPMENT) {
   console.log("Starting development server");
-  const http = await import("http");
   const vite = await import("vite");
-  const server = http.createServer(app);
   const viteDevServer = await vite.createServer({
     server: {
       middlewareMode: true,
-      hmr: { server },
+      hmr: { server: httpServer },
     },
   });
   app.use(viteDevServer.middlewares);
@@ -41,9 +41,10 @@ if (DEVELOPMENT) {
       next(error);
     }
   });
-  server.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
+
+  // Mount WebSocket server in dev (load via vite to get TS support)
+  const chatSource = await viteDevServer.ssrLoadModule("./lib/chatServer.ts");
+  chatSource.createChatServer(httpServer);
 } else {
   console.log("Starting production server");
   app.use(
@@ -54,7 +55,11 @@ if (DEVELOPMENT) {
   app.use(express.static("build/client", { maxAge: "1h" }));
   const mod = await import(BUILD_PATH);
   app.use(mod.app);
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
+
+  const { createChatServer } = await import("./lib/chatServer.js");
+  createChatServer(httpServer);
 }
+
+httpServer.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});

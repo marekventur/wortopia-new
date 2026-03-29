@@ -132,8 +132,20 @@ body {
 }
 
 /* chat.styl */
+.wortopia .chat {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 130px); /* viewport minus navbar + field */
+}
+
+.wortopia .chat .panel-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .wortopia .chat .panel-footer {
   position: relative;
+  flex-shrink: 0;
 }
 
 .wortopia .chat .panel-footer label {
