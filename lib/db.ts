@@ -67,6 +67,12 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS muted_users (
     user_id INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS word_sync_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    synced_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    word_count INTEGER NOT NULL
+  );
 `;
 
 let db: Database.Database | null = null;
