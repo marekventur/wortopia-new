@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "dev": "cross-env NODE_ENV=development node server.js",
+    "dev": "cross-env NODE_ENV=development PORT=3005 node server.js",
     "start": "node server.js",
     "typecheck": "react-router typegen && tsc -b",
     "pm2:start": "pm2 start ecosystem.config.cjs",

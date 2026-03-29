@@ -11,5 +11,8 @@ export default defineConfig(({ isSsrBuild }) => ({
         }
       : undefined,
   },
+  server: {
+    allowedHosts: ["dev.wortopia.de", "v2.wortopia.de"],
+  },
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
 }));
