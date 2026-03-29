@@ -1,28 +1,47 @@
-import type { Route } from "./+types/home";
-
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "Hello World" },
-    { name: "description", content: "Default app template" },
-  ];
-}
+import Nav from "../components/Nav";
+import CurrentField from "../components/CurrentField";
+import Chat from "../components/Chat";
+import PlayerList from "../components/PlayerList";
+import MainNotice from "../components/MainNotice";
+import GameMessages from "../components/GameMessages";
+import Guesses from "../components/Guesses";
+import LastField from "../components/LastField";
+import OptionsModal from "../components/modals/OptionsModal";
+import SignUpModal from "../components/modals/SignUpModal";
+import LoginModal from "../components/modals/LoginModal";
+import AccountModal from "../components/modals/AccountModal";
+import RecoverModal from "../components/modals/RecoverModal";
+import RulesModal from "../components/modals/RulesModal";
+import HighscoreModal from "../components/modals/HighscoreModal";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
-      <div className="card card-compact w-full max-w-md bg-base-200 shadow-xl">
-        <div className="card-body items-center text-center">
-          <h1 className="card-title text-4xl">Hello World</h1>
-          <p className="text-base-content/80">
-            React Router v7 + Express + Tailwind + DaisyUI + SQLite
-          </p>
-          <div className="card-actions justify-end">
-            <button type="button" className="btn btn-primary">
-              Get started
-            </button>
-          </div>
+    <div className="container">
+      <div><Nav /></div>
+
+      <div className="row">
+        <div className="col-md-6 col-md-push-3 main-area">
+          <div><CurrentField /></div>
+          <div><Chat /></div>
+        </div>
+        <div className="col-md-3 col-md-pull-6">
+          <div><PlayerList /></div>
+          <div><MainNotice /></div>
+        </div>
+        <div className="col-md-3">
+          <div><GameMessages /></div>
+          <div><Guesses /></div>
+          <div><LastField /></div>
         </div>
       </div>
-    </main>
+
+      <OptionsModal />
+      <SignUpModal />
+      <LoginModal />
+      <AccountModal />
+      <RecoverModal />
+      <RulesModal />
+      <HighscoreModal />
+    </div>
   );
 }

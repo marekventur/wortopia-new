@@ -11,28 +11,27 @@ import type { Route } from "./+types/root";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
-    rel: "preconnect",
-    href: "https://fonts.gstatic.com",
-    crossOrigin: "anonymous",
+    rel: "stylesheet",
+    href: "https://netdna.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css",
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+    href: "https://netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css",
   },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="light">
+    <html lang="de">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Wortopia</title>
         <Links />
         <Meta />
       </head>
-      <body className="min-h-screen bg-base-100 font-sans antialiased">
+      <body className="size-4 game-ongoing wortopia">
         {children}
         <ScrollRestoration />
         <Scripts />
