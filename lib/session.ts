@@ -18,6 +18,7 @@ export type SessionUser = {
   name: string;
   team: string | null;
   options: string;
+  email: string | null;
 };
 
 export type Session =
@@ -77,9 +78,10 @@ export async function getSession(request: Request): Promise<Session | null> {
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT u.id, u.name, u.team, u.options
+      `SELECT u.id, u.name, u.team, u.options, e.email
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id
+       LEFT JOIN user_emails e ON e.user_id = u.id
        WHERE s.session_token = ?
          AND s.user_id IS NOT NULL
          AND s.valid_until > datetime('now')`

@@ -1,3 +1,10 @@
+import { config as loadEnv } from "dotenv";
+
+// Load .env, then .env.local, then .env.<NODE_ENV>.local (later files win)
+loadEnv();
+loadEnv({ path: ".env.local", override: true });
+loadEnv({ path: `.env.${process.env.NODE_ENV ?? "development"}.local`, override: true });
+
 import compression from "compression";
 import express from "express";
 import morgan from "morgan";

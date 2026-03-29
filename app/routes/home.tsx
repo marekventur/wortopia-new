@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import type { Route } from "./+types/home";
 import Nav from "../components/Nav";
+import { useModalStore } from "../stores/modalStore";
 import CurrentField from "../components/CurrentField";
 import Chat from "../components/Chat";
 import PlayerList from "../components/PlayerList";
@@ -17,10 +19,12 @@ import HighscoreModal from "../components/modals/HighscoreModal";
 import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const openModal = url.searchParams.get("modal");
   const session = await getSession(request);
 
   if (session) {
-    return { session };
+    return { session, openModal };
   }
 
   // First visit — assign a guest ID and set cookie
@@ -29,13 +33,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   const cookieHeader = await sessionCookie.serialize(guestToken);
 
   return Response.json(
-    { session: { type: "guest", guestId } as Session },
+    { session: { type: "guest", guestId } as Session, openModal },
     { headers: { "Set-Cookie": cookieHeader } }
   );
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { session } = loaderData;
+  const { session, openModal: initialModal } = loaderData;
+  const { openModal } = useModalStore();
+
+  useEffect(() => {
+    if (initialModal) openModal(initialModal);
+  }, []);
+
   return (
     <div className="container">
       <div><Nav session={session} /></div>
@@ -59,7 +69,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <OptionsModal />
       <SignUpModal />
       <LoginModal />
-      <AccountModal />
+      <AccountModal user={session.type === "user" ? session.user : null} />
       <RecoverModal />
       <RulesModal />
       <HighscoreModal />

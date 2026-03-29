@@ -13,7 +13,7 @@ export async function sendRecoveryEmail(
   resetLink: string,
   siteUrl: string
 ): Promise<void> {
-  const client = mailgun.client({ username: "api", key: MAILGUN_API_KEY });
+  const client = mailgun.client({ username: "api", key: MAILGUN_API_KEY, url: "https://api.eu.mailgun.net" });
 
   await client.messages.create(MAILGUN_DOMAIN, {
     from: FROM_ADDRESS,

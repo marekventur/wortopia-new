@@ -6,4 +6,5 @@ export default [
   route("api/login", "routes/api.login.ts"),
   route("api/logout", "routes/api.logout.ts"),
   route("api/recover", "routes/api.recover.ts"),
+  route("api/account", "routes/api.account.ts"),
 ] satisfies RouteConfig;
