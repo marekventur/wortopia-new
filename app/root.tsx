@@ -31,7 +31,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
         <Meta />
       </head>
-      <body className="size-4 game-ongoing wortopia">
+      <body className="size-4 game-ongoing field-style--default wortopia">
         {children}
         <ScrollRestoration />
         <Scripts />

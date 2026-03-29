@@ -6,6 +6,131 @@ body {
   margin-right: 10px;
 }
 
+/* current-field.styl */
+.current-field > * {
+  margin-left: auto;
+  margin-right: auto;
+  transform-origin: 50% 0%;
+}
+
+.field-container {
+  user-select: none;
+}
+
+/* field-style-default.styl */
+.field-style--default .current-field {
+  margin-bottom: 20px;
+}
+
+.field-style--default .current-field canvas {
+  position: absolute;
+  top: 0;
+}
+
+.field-style--default .current-field table.field {
+  background-color: #ddd;
+  border-radius: 4px;
+  border-spacing: 0;
+}
+
+.field-style--default .current-field table.field td {
+  text-align: center;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  padding: 0;
+}
+
+.field-style--default .current-field table.field td:last-child {
+  border-right: none;
+}
+
+.field-style--default .current-field table.field tr:last-child td {
+  border-bottom: none;
+}
+
+.field-style--default.size-4 .current-field table.field td {
+  width: 70px;
+  height: 70px;
+  font-size: 35px;
+}
+
+.field-style--default.size-5 .current-field table.field td {
+  width: 56px;
+  height: 56px;
+  font-size: 30px;
+}
+
+.field-style--default.size-4 .field-container {
+  width: 284px; /* (70 + 1) * 4 */
+  position: relative;
+}
+
+.field-style--default.size-5 .field-container {
+  width: 285px; /* (56 + 1) * 5 */
+  position: relative;
+}
+
+.field-style--default.size-4 .input-area {
+  width: 284px;
+}
+
+.field-style--default.size-5 .input-area {
+  width: 285px;
+}
+
+.field-style--default .current-field .input-area {
+  margin-top: 30px;
+  position: relative;
+}
+
+.field-style--default .current-field .input-area input {
+  top: 0;
+  width: 100%;
+  display: block;
+  height: 30px;
+  padding-left: 5px;
+  text-transform: uppercase;
+  font-weight: bold;
+  font-size: 18px;
+  line-height: 30px;
+  letter-spacing: 1px;
+}
+
+.field-style--default .current-field .input-area label {
+  position: absolute;
+  top: 0;
+  right: 0;
+  color: #999;
+  margin: 0;
+  text-align: right;
+  font-size: 19px;
+  line-height: 30px;
+  margin-right: 5px;
+}
+
+.field-style--default .current-field .giant-tick,
+.field-style--default .current-field .giant-cross {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 231px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.field-style--default .current-field .giant-tick.highlight,
+.field-style--default .current-field .giant-cross.highlight {
+  animation: field-style-default-highlight 0.5s;
+}
+
+@keyframes field-style-default-highlight {
+  0%   { opacity: 0; font-size: 200px; }
+  50%  { opacity: 0.7; }
+  100% { opacity: 0; font-size: 330px; }
+}
+
 /* chat.styl */
 .wortopia .chat .panel-footer {
   position: relative;
