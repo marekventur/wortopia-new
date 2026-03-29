@@ -1,3 +1,6 @@
+import Modal from "./Modal";
+import { useModalStore } from "../../stores/modalStore";
+
 const highscores = [
   { id: 1, name: 'Axiom', count: 245, avg: 0.82, avgWords: 8.5 },
   { id: 2, name: 'Grobi', count: 189, avg: 0.79, avgWords: 7.2 },
@@ -10,53 +13,51 @@ const highscores = [
 ];
 
 export default function HighscoreModal() {
+  const { closeModal } = useModalStore();
   return (
-    <div className="modal fade modal--highscores" id="modal--highscore">
-      <div className="modal-dialog modal-lg">
-        <div className="modal-content">
-          <div className="modal-header">
-            <button type="button" className="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-            <h4 className="modal-title">Rangliste</h4>
+    <Modal id="highscore" size="lg">
+      <div className="modal-content modal--highscores">
+        <div className="modal-header">
+          <button type="button" className="close" onClick={closeModal} aria-hidden="true">&times;</button>
+          <h4 className="modal-title">Rangliste</h4>
+        </div>
+        <div className="modal-body">
+          <div className="input-group interval-select">
+            <select className="form-control" defaultValue="30">
+              <option value="1">letzten 24 Stunden</option>
+              <option value="7">letzten 7 Tage</option>
+              <option value="30">letzten 30 Tage</option>
+              <option value="60">letzten 60 Tage</option>
+              <option value="90">letzten 90 Tage</option>
+              <option value="180">letzten 180 Tage</option>
+              <option value="365">letzten 365 Tage</option>
+            </select>
           </div>
-          <div className="modal-body">
-            <div className="input-group interval-select">
-              <select className="form-control" defaultValue="30">
-                <option value="1">letzten 24 Stunden</option>
-                <option value="7">letzten 7 Tage</option>
-                <option value="30">letzten 30 Tage</option>
-                <option value="60">letzten 60 Tage</option>
-                <option value="90">letzten 90 Tage</option>
-                <option value="180">letzten 180 Tage</option>
-                <option value="365">letzten 365 Tage</option>
-              </select>
-            </div>
-            <p>Rangliste der 100 besten Spieler/innen in dem gewählten Zeitraum</p>
-
-            <table className="table table-condensed">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Spiele</th>
-                  <th>Ergebnis</th>
-                  <th>Wörtern pro Runde</th>
+          <p>Rangliste der 100 besten Spieler/innen in dem gewählten Zeitraum</p>
+          <table className="table table-condensed">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Spiele</th>
+                <th>Ergebnis</th>
+                <th>Wörtern pro Runde</th>
+              </tr>
+            </thead>
+            <tbody>
+              {highscores.map((result, i) => (
+                <tr key={result.id}>
+                  <td>{i + 1}</td>
+                  <td>{result.name}</td>
+                  <td>{result.count}</td>
+                  <td>{Math.round(result.avg * 100)}%</td>
+                  <td>{result.avgWords.toFixed(2)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {highscores.map((result, i) => (
-                  <tr key={result.id}>
-                    <td>{i + 1}</td>
-                    <td>{result.name}</td>
-                    <td>{result.count}</td>
-                    <td>{Math.round(result.avg * 100)}%</td>
-                    <td>{result.avgWords.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

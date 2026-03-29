@@ -17,9 +17,9 @@ export function generateSessionToken(): string {
   return crypto.randomUUID();
 }
 
-/** Returns the ISO timestamp for 30 days from now, for use as valid_until. */
+/** Returns a SQLite-compatible timestamp for 30 days from now, for use as valid_until. */
 export function sessionExpiry(): string {
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  return d.toISOString();
+  return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, "");
 }

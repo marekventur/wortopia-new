@@ -1,3 +1,4 @@
+import type { Route } from "./+types/home";
 import Nav from "../components/Nav";
 import CurrentField from "../components/CurrentField";
 import Chat from "../components/Chat";
@@ -13,11 +14,31 @@ import AccountModal from "../components/modals/AccountModal";
 import RecoverModal from "../components/modals/RecoverModal";
 import RulesModal from "../components/modals/RulesModal";
 import HighscoreModal from "../components/modals/HighscoreModal";
+import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
 
-export default function Home() {
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await getSession(request);
+
+  if (session) {
+    return { session };
+  }
+
+  // First visit — assign a guest ID and set cookie
+  const guestId = Math.floor(Math.random() * 100_001);
+  const guestToken = createGuestToken(guestId);
+  const cookieHeader = await sessionCookie.serialize(guestToken);
+
+  return Response.json(
+    { session: { type: "guest", guestId } as Session },
+    { headers: { "Set-Cookie": cookieHeader } }
+  );
+}
+
+export default function Home({ loaderData }: Route.ComponentProps) {
+  const { session } = loaderData;
   return (
     <div className="container">
-      <div><Nav /></div>
+      <div><Nav session={session} /></div>
 
       <div className="row">
         <div className="col-md-6 col-md-push-3 main-area">
