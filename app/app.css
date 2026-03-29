@@ -5,3 +5,78 @@ body {
 .navbar-right .btn-group {
   margin-right: 10px;
 }
+
+/* chat.styl */
+.wortopia .chat .panel-footer {
+  position: relative;
+}
+
+.wortopia .chat .panel-footer label {
+  z-index: 4;
+  position: absolute;
+  top: 0;
+  right: 3px;
+  color: #999;
+  margin: 0;
+  text-align: right;
+  font-size: 19px;
+  line-height: 30px;
+  margin-right: 5px;
+}
+
+/* guesses.styl */
+.guesses .word {
+  padding-left: 16px;
+  text-transform: uppercase;
+}
+
+.guesses .points,
+.guesses .status {
+  text-align: right;
+  padding-right: 15px;
+}
+
+/* last-round.styl */
+.last-round .panel-heading p {
+  margin-bottom: 5px;
+}
+
+.last-round .panel-heading table.field {
+  float: right;
+  margin-top: -10px;
+  margin-right: -14px;
+}
+
+.last-round .panel-heading table.field td {
+  width: 20px;
+  height: 20px;
+  text-align: center;
+  padding: 0;
+  background-color: #fff;
+  border-left: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+}
+
+.size-4 .last-round .panel-heading,
+.size-5 .last-round .panel-heading {
+  height: 84px; /* (20px + 1px) * 4 */
+}
+
+.last-round .panel-body {
+  word-spacing: 4px;
+  text-align: justify;
+}
+
+.last-round .panel-body .word {
+  text-transform: uppercase;
+  padding: 1px;
+}
+
+.last-round .panel-body .word--not-guessed {
+  color: #888;
+}
+
+.last-round .panel-body .word--highlight {
+  background-color: #428bca;
+  color: #fff;
+}
