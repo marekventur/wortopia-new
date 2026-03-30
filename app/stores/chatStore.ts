@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatMessage } from "../../lib/chatServer.js";
+import type { ChatMessage } from "../../lib/chatTypes.js";
 
 type ChatStore = {
   messages: ChatMessage[];

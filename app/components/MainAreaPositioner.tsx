@@ -32,14 +32,14 @@ export default function MainAreaPositioner({ children }: Props) {
 
   return (
     <>
-      {/* Invisible anchor — only exists on md+ so Bootstrap positions it correctly */}
+      {/* Invisible anchor — Bootstrap positions this, we just read its coords */}
       <div
         ref={anchorRef}
         className="col-md-6 col-md-push-3 hidden-xs hidden-sm"
         style={{ visibility: "hidden", pointerEvents: "none" }}
       />
 
-      {/* Fixed version — md+ only, positioned via ResizeObserver */}
+      {/* Fixed content — md+ only */}
       {mainRect && mainRect.width > 0 && (
         <div
           className="main-area hidden-xs hidden-sm"
@@ -54,11 +54,6 @@ export default function MainAreaPositioner({ children }: Props) {
           {children}
         </div>
       )}
-
-      {/* Normal flow version — xs/sm only, sits in the grid naturally */}
-      <div className="col-xs-12 hidden-md hidden-lg main-area">
-        {children}
-      </div>
     </>
   );
 }

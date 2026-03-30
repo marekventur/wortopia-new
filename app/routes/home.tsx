@@ -54,6 +54,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <div><Nav session={session} /></div>
 
       <div className="row">
+        {/* Small screen only: field sits above player list in normal flow */}
+        <div className="col-xs-12 hidden-md hidden-lg">
+          <CurrentField />
+        </div>
+
         <MainAreaPositioner>
           <CurrentField />
           <div className="chat-wrapper"><Chat session={session} /></div>

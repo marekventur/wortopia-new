@@ -2,6 +2,14 @@ body {
   padding-top: 70px;
 }
 
+/* xs + sm (< 992px): stack columns vertically in DOM order */
+@media (max-width: 991px) {
+  .wortopia .row {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 .navbar-right .btn-group {
   margin-right: 10px;
 }

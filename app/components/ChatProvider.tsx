@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useChatStore } from "../stores/chatStore";
-import type { ChatMessage } from "../../lib/chatServer.js";
+import type { ChatMessage } from "../../lib/chatTypes.js";
 
 const RECONNECT_DELAY_MS = 3000;
 

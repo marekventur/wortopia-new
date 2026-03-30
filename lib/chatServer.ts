@@ -1,18 +1,13 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import { getDb } from "./db.js";
-import { getSession, sessionCookie } from "./session.js";
+import { getSession } from "./session.js";
+import type { ChatMessage } from "./chatTypes.js";
+
+export type { ChatMessage };
 
 const MAX_MESSAGES = 100;
 const MAX_MESSAGE_LENGTH = 500;
-
-export type ChatMessage = {
-  id: number;
-  userId: number;
-  username: string;
-  message: string;
-  createdAt: string;
-};
 
 type IncomingFrame = { type: "message"; message: string };
 type OutgoingFrame =
