@@ -132,14 +132,34 @@ body {
 }
 
 /* chat.styl */
-.wortopia .chat {
+
+/* Middle column: positioned via MainAreaPositioner (position: fixed, left/width from ResizeObserver) */
+.wortopia .main-area {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 130px); /* viewport minus navbar + field */
+  overflow: hidden;
 }
 
+/* Chat wrapper grows to fill space left by the field */
+.wortopia .chat-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Chat panel itself fills its wrapper */
+.wortopia .chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollable message area */
 .wortopia .chat .panel-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 

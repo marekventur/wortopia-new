@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { Route } from "./+types/home";
 import Nav from "../components/Nav";
 import ChatProvider from "../components/ChatProvider";
+import MainAreaPositioner from "../components/MainAreaPositioner";
 import { useModalStore } from "../stores/modalStore";
 import CurrentField from "../components/CurrentField";
 import Chat from "../components/Chat";
@@ -53,10 +54,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <div><Nav session={session} /></div>
 
       <div className="row">
-        <div className="col-md-6 col-md-push-3 main-area">
-          <div><CurrentField /></div>
-          <div><Chat session={session} /></div>
-        </div>
+        <MainAreaPositioner>
+          <CurrentField />
+          <div className="chat-wrapper"><Chat session={session} /></div>
+        </MainAreaPositioner>
         <div className="col-md-3 col-md-pull-6">
           <div><PlayerList /></div>
           <div><MainNotice /></div>
