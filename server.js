@@ -42,9 +42,17 @@ if (DEVELOPMENT) {
     }
   });
 
-  // Mount WebSocket server in dev (load via vite to get TS support)
+  // Mount WebSocket servers in dev (load via vite to get TS support)
   const chatSource = await viteDevServer.ssrLoadModule("./lib/chatServer.ts");
-  chatSource.createChatServer(httpServer);
+  const chatWss = chatSource.createChatServer(httpServer);
+
+  const gameSource = await viteDevServer.ssrLoadModule("./lib/gameWsServer.ts");
+  const { getGameServer } = await viteDevServer.ssrLoadModule("./lib/gameServer.ts");
+  const gameServer = getGameServer();
+  await gameServer.init();
+  const gameWssMap = gameSource.createGameWsServer();
+
+  mountWsRouter(httpServer, chatWss, gameWssMap);
 } else {
   console.log("Starting production server");
   app.use(
@@ -57,7 +65,46 @@ if (DEVELOPMENT) {
   app.use(mod.app);
 
   const { createChatServer } = await import("./lib/chatServer.js");
-  createChatServer(httpServer);
+  const chatWss = createChatServer(httpServer);
+
+  const { getGameServer } = await import("./lib/gameServer.js");
+  const { createGameWsServer } = await import("./lib/gameWsServer.js");
+  const gameServer = getGameServer();
+  await gameServer.init();
+  const gameWssMap = createGameWsServer();
+
+  mountWsRouter(httpServer, chatWss, gameWssMap);
+}
+
+/**
+ * Central WebSocket upgrade router.
+ *
+ * Multiple WebSocketServer instances with path-matching all register upgrade
+ * listeners and send 400 for non-matching paths, clobbering each other.
+ * The fix: use noServer:true everywhere and route manually here.
+ */
+function mountWsRouter(server, chatWss, gameWssMap) {
+  server.on("upgrade", (req, socket, head) => {
+    const pathname = new URL(req.url, "http://localhost").pathname;
+
+    if (pathname === "/ws/chat") {
+      chatWss.handleUpgrade(req, socket, head, (ws) => {
+        chatWss.emit("connection", ws, req);
+      });
+      return;
+    }
+
+    const gameWss = gameWssMap.get(pathname);
+    if (gameWss) {
+      gameWss.handleUpgrade(req, socket, head, (ws) => {
+        gameWss.emit("connection", ws, req);
+      });
+      return;
+    }
+
+    // Unknown path — let Vite's HMR handler claim it (it registered first)
+    // Do not destroy — Vite's own upgrade listener handles /@vite/hmr etc.
+  });
 }
 
 httpServer.listen(PORT, () => {

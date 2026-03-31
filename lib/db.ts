@@ -84,6 +84,21 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS chat_messages_created_at
     ON chat_messages (created_at);
+
+  CREATE TABLE IF NOT EXISTS round_guesses (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_id   INTEGER NOT NULL,
+    size       INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    username   TEXT    NOT NULL,
+    word       TEXT    NOT NULL,
+    result     TEXT    NOT NULL,
+    points     INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS round_guesses_lookup
+    ON round_guesses (round_id, size, user_id);
 `;
 
 let db: Database.Database | null = null;
@@ -95,6 +110,12 @@ export function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
+
+    // 3-letter prefix index used by fieldWords.ts.
+    // words_prefix (2-letter) and words_first_two_letters (QU-replacement) are legacy;
+    // words_first_two was a duplicate we added — drop it.
+    db.exec(`CREATE INDEX IF NOT EXISTS words_three ON words (substr(word, 1, 3))`);
+    try { db.exec(`DROP INDEX IF EXISTS words_first_two`); } catch { /* already gone */ }
   }
   return db;
 }

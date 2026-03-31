@@ -46,8 +46,8 @@ function saveMessage(userId: number, username: string, message: string): ChatMes
   return row;
 }
 
-export function createChatServer(httpServer: Server): WebSocketServer {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws/chat" });
+export function createChatServer(_httpServer: Server): WebSocketServer {
+  const wss = new WebSocketServer({ noServer: true });
 
   wss.on("connection", async (ws, req) => {
     // Identify the connecting user from their session cookie

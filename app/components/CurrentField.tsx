@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { fieldContains, type Cell } from '../../lib/fieldContains.js';
 
 // TODO: Replace with field + size from game context
 const MOCK_FIELD: string[][] = [
@@ -9,53 +10,6 @@ const MOCK_FIELD: string[][] = [
 ];
 
 const DIMENSION = 280;
-
-type Cell = { x: number; y: number };
-
-/**
- * Ported from FieldFactory.js
- * Searches the field for a connected chain of cells that spells the given word.
- * Returns the chain if found, null otherwise.
- */
-function fieldContains(field: string[][], word: string): Cell[] | null {
-  const lower = word.toLowerCase();
-  const size = field.length;
-
-  function cloneField(f: (string | null)[][]): (string | null)[][] {
-    return f.map(row => [...row]);
-  }
-
-  function recurse(
-    f: (string | null)[][],
-    pos: number,
-    x: number,
-    y: number,
-    chain: Cell[],
-  ): Cell[] | null {
-    if (f[y][x] !== lower[pos]) return null;
-    const next = [...chain, { x, y }];
-    if (pos === lower.length - 1) return next;
-    const cloned = cloneField(f);
-    cloned[y][x] = null;
-    for (let ny = y - 1; ny <= y + 1; ny++) {
-      for (let nx = x - 1; nx <= x + 1; nx++) {
-        if (nx >= 0 && ny >= 0 && nx < size && ny < size && (nx !== x || ny !== y)) {
-          const result = recurse(cloned, pos + 1, nx, ny, next);
-          if (result) return result;
-        }
-      }
-    }
-    return null;
-  }
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const result = recurse(field as (string | null)[][], 0, x, y, []);
-      if (result) return result;
-    }
-  }
-  return null;
-}
 
 export default function CurrentField() {
   // TODO: read field and size from game context
