@@ -26,6 +26,8 @@ export default function Guesses() {
   const myGuesses = useGameStore((s) => s.myGuesses);
   const totalPoints = myGuesses.reduce((sum, g) => sum + (g.result === 'correct' ? g.points : 0), 0);
 
+  if (myGuesses.length === 0) return null;
+
   return (
     <div className="guesses">
       <div className="panel panel-default">
