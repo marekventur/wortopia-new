@@ -29,16 +29,11 @@ export default function CurrentField() {
   const [crossHighlight, setCrossHighlight] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useCallback((el: HTMLInputElement | null) => { el?.focus(); }, []);
   const chainRef = useRef<Cell[]>([]);
   const leftButtonDownRef = useRef(false);
   const startSwipingFieldRef = useRef<Cell | null>(null);
   const scaleRef = useRef(1);
-
-  // Focus input when game becomes ongoing (new round or on connect)
-  useEffect(() => {
-    if (!isCooldown) inputRef.current?.focus();
-  }, [isCooldown]);
 
   // Animate on guess result
   useEffect(() => {
