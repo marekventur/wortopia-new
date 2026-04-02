@@ -95,6 +95,48 @@ export function buildResults(
 }
 
 /**
+ * Persists per-user results for a finished round into user_results.
+ * Only registered users (positive user_id) are recorded.
+ * Safe to call multiple times — skips users already recorded for this round.
+ */
+export function persistRoundResults(
+  roundId: number,
+  size: number,
+  guesses: GuessRow[],
+  validWords: Set<string>,
+): void {
+  const db = getDb();
+
+  // Max possible score for this field
+  const maxWords = validWords.size;
+  const maxPoints = [...validWords].reduce((sum, w) => sum + getScore(w.length), 0);
+
+  // Aggregate per registered user
+  const userMap = new Map<number, { words: number; points: number }>();
+  for (const g of guesses) {
+    if (g.user_id <= 0 || g.result !== "correct") continue;
+    if (!userMap.has(g.user_id)) userMap.set(g.user_id, { words: 0, points: 0 });
+    const u = userMap.get(g.user_id)!;
+    u.words++;
+    u.points += g.points;
+  }
+
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO user_results (user_id, round_id, words, points, max_words, max_points, size)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const run = db.transaction(() => {
+    for (const [userId, { words, points }] of userMap) {
+      insert.run(userId, roundId, words, points, maxWords, maxPoints, size);
+    }
+  });
+  run();
+
+  console.log(`[gameState] Persisted results for round ${roundId} size ${size}: ${userMap.size} users`);
+}
+
+/**
  * Builds the full word list for a completed round.
  * Includes ALL valid words (not just guessed ones), with description, points,
  * and the list of user IDs who guessed each word correctly.

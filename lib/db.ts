@@ -56,12 +56,14 @@ const SCHEMA = `
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL
                REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    round_id   INTEGER NOT NULL DEFAULT 0,
     finished   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     words      INTEGER NOT NULL,
     points     INTEGER NOT NULL,
     max_words  INTEGER NOT NULL,
     max_points INTEGER NOT NULL,
-    size       INTEGER NOT NULL
+    size       INTEGER NOT NULL,
+    UNIQUE (user_id, round_id, size)
   );
 
   CREATE TABLE IF NOT EXISTS muted_users (
@@ -118,9 +120,16 @@ export function getDb(): Database.Database {
     try { db.exec(`DROP INDEX IF EXISTS words_first_two`); } catch { /* already gone */ }
 
     // Migration: namespace chat by game size
-    const cols = (db.prepare(`PRAGMA table_info(chat_messages)`).all() as { name: string }[]).map(c => c.name);
-    if (!cols.includes('size')) {
+    const chatCols = (db.prepare(`PRAGMA table_info(chat_messages)`).all() as { name: string }[]).map(c => c.name);
+    if (!chatCols.includes('size')) {
       db.exec(`ALTER TABLE chat_messages ADD COLUMN size INTEGER NOT NULL DEFAULT 4`);
+    }
+
+    // Migration: add round_id + unique constraint to user_results
+    const resultCols = (db.prepare(`PRAGMA table_info(user_results)`).all() as { name: string }[]).map(c => c.name);
+    if (!resultCols.includes('round_id')) {
+      db.exec(`ALTER TABLE user_results ADD COLUMN round_id INTEGER NOT NULL DEFAULT 0`);
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS user_results_unique ON user_results (user_id, round_id, size)`);
     }
   }
   return db;

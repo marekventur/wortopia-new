@@ -7,6 +7,7 @@ import {
   getSecondsRemaining,
   buildResults,
   buildLastRoundResults,
+  persistRoundResults,
   type GuessRow,
   type RoundResults,
   type LastRoundResults,
@@ -223,6 +224,9 @@ export class GameServer extends EventEmitter {
         field: s.current.field,
         results: buildLastRoundResults(guesses, s.current.validWords),
       };
+
+      // Persist per-user results for ranking
+      persistRoundResults(roundId, size, guesses, s.current.validWords);
 
       // Emit update (lastRound now populated, current_round shows cooldown)
       const updatePayload = this.buildUpdatePayload(size, undefined);

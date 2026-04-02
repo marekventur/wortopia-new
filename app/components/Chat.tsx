@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useChatStore } from "../stores/chatStore";
+import { useGameStore } from "../stores/gameStore";
 import type { Session } from "../../lib/session.js";
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 type Props = {
   session: Session;
@@ -10,6 +17,9 @@ export default function Chat({ session }: Props) {
   const messages = useChatStore((s) => s.messages);
   const send = useChatStore((s) => s.send);
   const connected = useChatStore((s) => s.connected);
+  const currentRound = useGameStore((s) => s.currentRound);
+  const isCooldown = currentRound?.state === 'cooldown';
+  const secondsRemaining = currentRound?.seconds_remaining ?? 0;
   const [input, setInput] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +63,9 @@ export default function Chat({ session }: Props) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
             />
+            {isCooldown && (
+              <span className="input-group-addon">{formatTime(secondsRemaining)}</span>
+            )}
           </div>
         </div>
       </div>
