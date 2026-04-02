@@ -222,9 +222,12 @@ body {
   border-bottom: 1px solid #ddd;
 }
 
-.size-4 .last-round .panel-heading,
-.size-5 .last-round .panel-heading {
+.last-round.size-4 .panel-heading {
   height: 84px; /* (20px + 1px) * 4 */
+}
+
+.last-round.size-5 .panel-heading {
+  height: 105px; /* (20px + 1px) * 5 */
 }
 
 .last-round .panel-body {

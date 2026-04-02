@@ -17,6 +17,8 @@ export default function LastField() {
   const { players, words } = lastRound.results;
 
   const myStats = players.find((p) => p.userId === myUserId);
+  const totalWords = words.length;
+  const totalPoints = words.reduce((sum, w) => sum + w.points, 0);
 
   const chainIndexMap = new Map<string, number>();
   if (hoveredChain) {
@@ -25,7 +27,7 @@ export default function LastField() {
 
   return (
     <div>
-      <div className="panel panel-default last-round">
+      <div className={`panel panel-default last-round size-${size}`}>
         <div className="panel-heading">
           <table className="field">
             <tbody>
@@ -50,11 +52,7 @@ export default function LastField() {
           <div>
             <p>Letzte Runde</p>
             <small>
-              {myStats ? (
-                <>{myStats.points} Punkte<br />{myStats.words} Wörter</>
-              ) : (
-                <>– Punkte<br />– Wörter</>
-              )}
+              {totalPoints} Punkte<br />{totalWords} Wörter
             </small>
           </div>
         </div>
