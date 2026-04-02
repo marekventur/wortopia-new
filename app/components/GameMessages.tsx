@@ -1,4 +1,13 @@
+import { useGameStore } from "../stores/gameStore.js";
+
 export default function GameMessages() {
-  // noWebsocketConnectionWarning is false in the mock — hide this panel
-  return null;
+  const connected = useGameStore((s) => s.connected);
+
+  if (connected) return null;
+
+  return (
+    <div className="alert alert-warning">
+      Keine Verbindung zum Spielserver. Verbinde…
+    </div>
+  );
 }

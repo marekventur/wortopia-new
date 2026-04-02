@@ -7,14 +7,15 @@ type Props = {
 };
 
 export default function Chat({ session }: Props) {
-  const { messages, send } = useChatStore();
+  const messages = useChatStore((s) => s.messages);
+  const send = useChatStore((s) => s.send);
+  const connected = useChatStore((s) => s.connected);
   const [input, setInput] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const displayName =
     session.type === "user" ? session.user.name : `Gast ${session.guestId}`;
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (bodyRef.current) {
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
@@ -24,17 +25,13 @@ export default function Chat({ session }: Props) {
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
     const text = input.trim();
-    if (!text) return;
+    if (!text || !connected) return;
     send(text);
     setInput("");
   }
 
   return (
     <>
-      <div className="visible-xs-block visible-sm-block hidden-md hidden-lg">
-        <h2 className="pause-timer">Bitte warten - 1:29</h2>
-      </div>
-
       <div className="chat panel panel-default hidden-xs hidden-sm">
         <div className="panel-body chat-content" ref={bodyRef}>
           {messages.map((msg) => (
@@ -50,12 +47,12 @@ export default function Chat({ session }: Props) {
               type="text"
               className="form-control chat-input"
               id="chat-input"
-              placeholder="Chat"
+              placeholder={connected ? "Chat" : "Verbinde…"}
               value={input}
+              disabled={!connected}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
             />
-            <label htmlFor="chat-input">1:29</label>
           </div>
         </div>
       </div>

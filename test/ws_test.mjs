@@ -99,7 +99,8 @@ function connectGame(size) {
       headers: { cookie: signedToken },
     });
     const messages = [];
-    let initReceived = false;
+    let hasUpdate = false;
+    let hasChatInit = false;
 
     const timeout = setTimeout(() => reject(new Error(`Timeout connecting to /ws/game/${size}`)), 5000);
 
@@ -107,14 +108,35 @@ function connectGame(size) {
     ws.on("message", (data) => {
       const msg = JSON.parse(data.toString());
       messages.push(msg);
-      if (msg.type === "update" && !initReceived) {
-        initReceived = true;
+      if (msg.type === "update") hasUpdate = true;
+      if (msg.type === "chat_init") hasChatInit = true;
+      if (hasUpdate && hasChatInit) {
         clearTimeout(timeout);
-        resolve({ ws, messages, initial: msg });
+        resolve({
+          ws,
+          messages,
+          initial: messages.find(m => m.type === "update"),
+          chatInit: messages.find(m => m.type === "chat_init"),
+        });
       }
     });
     ws.on("error", reject);
     ws.on("close", () => {});
+  });
+}
+
+function waitForMessage(ws, type) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`Timeout waiting for ${type}`)), 3000);
+    const handler = (data) => {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === type) {
+        clearTimeout(timeout);
+        ws.off("message", handler);
+        resolve(msg);
+      }
+    };
+    ws.on("message", handler);
   });
 }
 
@@ -146,8 +168,10 @@ function waitForTick(ws) {
 section("WebSocket /ws/game/4");
 
 try {
-  const { ws: ws4, initial: init4 } = await connectGame(4);
+  const { ws: ws4, initial: init4, chatInit: chatInit4 } = await connectGame(4);
 
+  assert(chatInit4 !== undefined,                          `chat_init message received`);
+  assert(Array.isArray(chatInit4?.messages),               `chat_init carries messages array`);
   assert(init4.type === "update",                         `Initial message type = update`);
   assert(init4.current_round?.id === roundId,             `Round ID matches (${init4.current_round?.id})`);
   assert(init4.current_round?.field === field4,           `Field matches deterministic value`);
@@ -214,6 +238,46 @@ try {
   ws5.close();
 } catch (err) {
   fail(`/ws/game/5: ${err.message}`);
+  console.error(err);
+}
+
+// ── Chat over game WebSocket ──────────────────────────────────────────────────
+section("Chat via /ws/game/4");
+
+try {
+  const { ws: wsA, chatInit } = await connectGame(4);
+  const { ws: wsB } = await connectGame(4);
+
+  assert(Array.isArray(chatInit.messages), `chat_init has messages array`);
+
+  // wsA sends a chat message; both wsA and wsB should receive it
+  const [receivedA, receivedB] = await Promise.all([
+    waitForMessage(wsA, "chat_message"),
+    waitForMessage(wsB, "chat_message"),
+    Promise.resolve().then(() =>
+      wsA.send(JSON.stringify({ type: "chat_message", message: "Hallo Welt!" }))
+    ),
+  ]);
+
+  assert(receivedA.message.message === "Hallo Welt!", `Sender receives own chat_message`);
+  assert(receivedB.message.message === "Hallo Welt!", `Other client receives chat_message broadcast`);
+  assert(typeof receivedA.message.id === "number",    `chat_message has numeric id`);
+  assert(receivedA.message.username !== undefined,    `chat_message has username`);
+
+  // Chat from size 4 does NOT appear on size 5
+  const { ws: ws5chat } = await connectGame(5);
+  let leaked = false;
+  ws5chat.on("message", (data) => {
+    const m = JSON.parse(data.toString());
+    if (m.type === "chat_message" && m.message.message === "Size4Only") leaked = true;
+  });
+  wsA.send(JSON.stringify({ type: "chat_message", message: "Size4Only" }));
+  await sleep(500);
+  assert(!leaked, `Size 4 chat does not leak to /ws/game/5`);
+
+  wsA.close(); wsB.close(); ws5chat.close();
+} catch (err) {
+  fail(`Chat test: ${err.message}`);
   console.error(err);
 }
 

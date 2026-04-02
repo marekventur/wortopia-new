@@ -116,6 +116,12 @@ export function getDb(): Database.Database {
     // words_first_two was a duplicate we added — drop it.
     db.exec(`CREATE INDEX IF NOT EXISTS words_three ON words (substr(word, 1, 3))`);
     try { db.exec(`DROP INDEX IF EXISTS words_first_two`); } catch { /* already gone */ }
+
+    // Migration: namespace chat by game size
+    const cols = (db.prepare(`PRAGMA table_info(chat_messages)`).all() as { name: string }[]).map(c => c.name);
+    if (!cols.includes('size')) {
+      db.exec(`ALTER TABLE chat_messages ADD COLUMN size INTEGER NOT NULL DEFAULT 4`);
+    }
   }
   return db;
 }

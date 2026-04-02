@@ -1,11 +1,13 @@
 import { useModalStore } from "../stores/modalStore";
 import type { Session } from "../../lib/session.js";
+import type { GameSize } from "../stores/gameStore";
 
 type Props = {
   session: Session;
+  size: GameSize;
 };
 
-export default function Nav({ session }: Props) {
+export default function Nav({ session, size }: Props) {
   const { openModal } = useModalStore();
   const displayName = session.type === "user" ? session.user.name : `Gast ${session.guestId}`;
 
@@ -43,8 +45,8 @@ export default function Nav({ session }: Props) {
             </li>
           </ul>
           <ul className="nav navbar-nav">
-            <li className="active"><a href="/4">4x4 <span className="badge">69</span></a></li>
-            <li><a href="/5">5x5</a></li>
+            <li className={size === 4 ? "active" : ""}><a href="/4">4x4</a></li>
+            <li className={size === 5 ? "active" : ""}><a href="/5">5x5</a></li>
             <li><a href="#" onClick={(e) => { e.preventDefault(); openModal("rules"); }}>Regeln</a></li>
             <li><a href="#" onClick={(e) => { e.preventDefault(); openModal("highscore"); }}>Rangliste</a></li>
             <li><a href="#" onClick={(e) => { e.preventDefault(); openModal("options"); }}>Einstellungen</a></li>

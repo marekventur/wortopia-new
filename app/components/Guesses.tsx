@@ -1,43 +1,30 @@
-type Guess =
-  | { word: string; points: number; status?: undefined }
-  | { word: string; points?: undefined; status: string };
-
-const guesses: Guess[] = [
-  { word: 'ASDFAS', status: 'notOnField' },
-  { word: 'DER', status: 'dublicated' },
-  { word: 'SER', status: 'notInDictionary' },
-  { word: 'DAS', points: 1 },
-  { word: 'DER', points: 1 },
-  { word: 'RES', points: 1 },
-];
+import { useGameStore } from "../stores/gameStore.js";
 
 const statusLabels: Record<string, string> = {
-  waiting: '',
-  dublicated: 'Bereits geraten',
-  notOnField: 'Nicht auf dem Feld',
-  notInDictionary: 'Nicht im Wörterbuch',
-  tooLate: 'Zu Spät',
-  tooShort: 'Zu kurz',
-  unexpected: 'Etwas ist schief gegangen :(',
+  duplicate: 'Bereits geraten',
+  not_on_field: 'Nicht auf dem Feld',
+  not_in_dictionary: 'Nicht im Wörterbuch',
+  cooldown: 'Zu Spät',
+  too_short: 'Zu kurz',
 };
 
 const rowClass: Record<string, string> = {
-  notOnField: 'danger',
-  dublicated: 'warning',
-  notInDictionary: 'danger',
-  tooLate: 'danger',
-  tooShort: 'danger',
-  unexpected: 'danger',
+  not_on_field: 'danger',
+  duplicate: 'warning',
+  not_in_dictionary: 'danger',
+  cooldown: 'danger',
+  too_short: 'danger',
 };
 
 const statusTextClass: Record<string, string> = {
-  notOnField: 'text-danger',
-  dublicated: 'text-warning',
-  notInDictionary: 'text-danger',
+  not_on_field: 'text-danger',
+  duplicate: 'text-warning',
+  not_in_dictionary: 'text-danger',
 };
 
 export default function Guesses() {
-  const totalPoints = guesses.reduce((sum, g) => sum + (g.points ?? 0), 0);
+  const myGuesses = useGameStore((s) => s.myGuesses);
+  const totalPoints = myGuesses.reduce((sum, g) => sum + (g.result === 'correct' ? g.points : 0), 0);
 
   return (
     <div className="guesses">
@@ -45,14 +32,14 @@ export default function Guesses() {
         <div className="panel-heading">{totalPoints} Punkte</div>
         <table className="table table-condensed">
           <tbody>
-            {guesses.map((guess, i) => (
-              <tr key={i} className={guess.points !== undefined ? 'success' : rowClass[guess.status!]}>
+            {myGuesses.map((guess, i) => (
+              <tr key={i} className={guess.result === 'correct' ? 'success' : (rowClass[guess.result] ?? 'danger')}>
                 <td className="word">{guess.word}</td>
-                {guess.points !== undefined ? (
+                {guess.result === 'correct' ? (
                   <td className="points"><span className="badge">{guess.points}</span></td>
                 ) : (
-                  <td className={`status ${statusTextClass[guess.status!] ?? 'text-danger'}`}>
-                    {statusLabels[guess.status!] ?? guess.status}
+                  <td className={`status ${statusTextClass[guess.result] ?? 'text-danger'}`}>
+                    {statusLabels[guess.result] ?? guess.result}
                   </td>
                 )}
               </tr>

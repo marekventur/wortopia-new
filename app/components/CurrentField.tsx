@@ -1,21 +1,26 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { fieldContains, type Cell } from '../../lib/fieldContains.js';
-
-// TODO: Replace with field + size from game context
-const MOCK_FIELD: string[][] = [
-  ['J', 'E', 'I', 'E'],
-  ['E', 'E', 'C', 'G'],
-  ['D', 'I', 'I', 'O'],
-  ['D', 'G', 'H', 'A'],
-];
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { fieldContains, fieldToGrid, type Cell } from '../../lib/fieldContains.js';
+import { useGameStore } from '../stores/gameStore';
 
 const DIMENSION = 280;
 
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export default function CurrentField() {
-  // TODO: read field and size from game context
-  const field = MOCK_FIELD;
-  const size = field.length;
+  const { size, currentRound, lastGuessResult, guess, connected } = useGameStore();
+
+  const field: string[][] = useMemo(() => {
+    if (!currentRound?.field) return [];
+    return fieldToGrid(currentRound.field, size);
+  }, [currentRound?.field, size]);
+
   const cellDimension = DIMENSION / size;
+  const isCooldown = currentRound?.state === 'cooldown';
+  const secondsRemaining = currentRound?.seconds_remaining ?? 0;
 
   const [chain, setChain] = useState<Cell[]>([]);
   const [wordEntered, setWordEntered] = useState('');
@@ -28,7 +33,19 @@ export default function CurrentField() {
   const chainRef = useRef<Cell[]>([]);
   const leftButtonDownRef = useRef(false);
   const startSwipingFieldRef = useRef<Cell | null>(null);
-  const scaleRef = useRef(1); // TODO: read from userOptions.boardScale
+  const scaleRef = useRef(1);
+
+  // Animate on guess result
+  useEffect(() => {
+    if (!lastGuessResult) return;
+    if (lastGuessResult.result === 'correct') {
+      setTickHighlight(true);
+      setTimeout(() => setTickHighlight(false), 600);
+    } else if (lastGuessResult.result !== 'cooldown') {
+      setCrossHighlight(true);
+      setTimeout(() => setCrossHighlight(false), 600);
+    }
+  }, [lastGuessResult?.ts]);
 
   // --- Canvas drawing ---
 
@@ -89,16 +106,14 @@ export default function CurrentField() {
   }, [updateChain, drawChain]);
 
   const submitWord = useCallback(
-    (word: string, guessingMethod: string) => {
-      // TODO: game.setLastGuessingMethod(guessingMethod)
-      // TODO: game.guess(word)
-      console.log('TODO: submit word', word, 'via', guessingMethod);
+    (word: string) => {
+      if (word) guess(word);
       setWordEntered('');
       setWordEnteredClass('');
       updateChain([]);
       drawChain([]);
     },
-    [updateChain, drawChain],
+    [guess, updateChain, drawChain],
   );
 
   /** Returns 'a' (added), 'd' (duplicate/submit), or 'i' (invalid/non-adjacent) */
@@ -127,9 +142,9 @@ export default function CurrentField() {
 
   const submitChain = useCallback(
     (guessingMethod: string) => {
-      const word = chainRef.current.map(el => field[el.y][el.x]).join('');
+      const word = chainRef.current.map(el => field[el.y]?.[el.x] ?? '').join('');
       if (word.length > 2) {
-        submitWord(word, guessingMethod);
+        submitWord(word);
       } else {
         clearChain();
       }
@@ -137,7 +152,7 @@ export default function CurrentField() {
     [field, submitWord, clearChain],
   );
 
-  // --- Swipe logic (shared by mouse and touch) ---
+  // --- Swipe logic ---
 
   const swipeStart = useCallback(
     (posX: number, posY: number, guessingMethod: string) => {
@@ -189,7 +204,7 @@ export default function CurrentField() {
     [cellDimension, submitChain],
   );
 
-  // --- Touch events (non-passive to allow preventDefault) ---
+  // --- Touch events ---
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -238,12 +253,6 @@ export default function CurrentField() {
     };
   }, [swipeStart, swipeMove, swipeEnd]);
 
-  // --- Game event subscriptions ---
-  // TODO: wire up to game context when data layer is ready
-  // game.on('guessCorrect', () => { setTickHighlight(true); setTimeout(() => setTickHighlight(false), 600); });
-  // game.on('guessIncorrect', () => { setCrossHighlight(true); setTimeout(() => setCrossHighlight(false), 600); });
-  // game.on('gamePaused', () => { clearChain(); if (inputRef.current focused) re-focus on gameOngoing });
-
   // --- Mouse event handlers ---
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -276,8 +285,7 @@ export default function CurrentField() {
     if (word === '') {
       updateChain([]);
       drawChain([]);
-    } else {
-      // TODO: field comes from game context; using MOCK_FIELD for now
+    } else if (field.length > 0) {
       const newChain = fieldContains(field, word);
       if (newChain) {
         chainRef.current = newChain;
@@ -294,62 +302,82 @@ export default function CurrentField() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (wordEntered) submitWord(wordEntered, 'keyboard');
+    if (wordEntered) submitWord(wordEntered);
   };
 
   const isPartOfChain = (x: number, y: number) =>
     chain.some(el => el.x === x && el.y === y);
 
-  // TODO: getContainerStyle() for board scaling from userOptions
-  const containerStyle = {};
+  // Loading / disconnected state
+  if (!connected || field.length === 0) {
+    return (
+      <div className={`field-style--default size-${size}`}>
+        <div className="current-field">
+          <div className="field-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: DIMENSION }}>
+            <span className="text-muted">{connected ? 'Lade…' : 'Verbinde…'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="current-field">
-      <div className="field-container" style={containerStyle}>
-        <table className="field">
-          <tbody>
-            {field.map((row, y) => (
-              <tr key={y}>
-                {row.map((cell, x) => (
-                  <td
-                    key={x}
-                    className={`cell cell--${x}-${y}${isPartOfChain(x, y) ? ' cell--selected' : ''}`}
-                  >
-                    {cell.toUpperCase()}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className={`field-style--default size-${size}`}>
+      <div className="current-field">
+        <div className="field-container">
+          <table className="field">
+            <tbody>
+              {field.map((row, y) => (
+                <tr key={y}>
+                  {row.map((cell, x) => (
+                    <td
+                      key={x}
+                      className={`cell cell--${x}-${y}${isPartOfChain(x, y) ? ' cell--selected' : ''}`}
+                    >
+                      {cell.toUpperCase()}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-        <div className={`giant-tick visible-xs-block visible-sm-block hidden-md hidden-lg${tickHighlight ? ' highlight' : ''}`}>✓</div>
-        <div className={`giant-cross visible-xs-block visible-sm-block hidden-md hidden-lg${crossHighlight ? ' highlight' : ''}`}>✗</div>
+          <div className={`giant-tick visible-xs-block visible-sm-block hidden-md hidden-lg${tickHighlight ? ' highlight' : ''}`}>✓</div>
+          <div className={`giant-cross visible-xs-block visible-sm-block hidden-md hidden-lg${crossHighlight ? ' highlight' : ''}`}>✗</div>
 
-        <canvas
-          ref={canvasRef}
-          width={DIMENSION}
-          height={DIMENSION}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-        />
+          <canvas
+            ref={canvasRef}
+            width={DIMENSION}
+            height={DIMENSION}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+          />
+        </div>
+
+        <form
+          className={`input-area hidden-xs hidden-sm${wordEnteredClass ? ` ${wordEnteredClass}` : ''}`}
+          onSubmit={handleSubmit}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            className="input form-control"
+            id="word-input"
+            value={wordEntered}
+            onChange={e => handleTypeWord(e.target.value)}
+            disabled={isCooldown}
+            placeholder={isCooldown ? 'Pause…' : ''}
+          />
+          <label htmlFor="word-input">
+            {isCooldown ? (
+              <span className="text-muted">{formatTime(secondsRemaining)}</span>
+            ) : (
+              formatTime(secondsRemaining)
+            )}
+          </label>
+        </form>
       </div>
-
-      <form
-        className={`input-area hidden-xs hidden-sm${wordEnteredClass ? ` ${wordEnteredClass}` : ''}`}
-        onSubmit={handleSubmit}
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          className="input form-control"
-          id="word-input"
-          value={wordEntered}
-          onChange={e => handleTypeWord(e.target.value)}
-        />
-        <label htmlFor="word-input">2:04</label>
-      </form>
     </div>
   );
 }

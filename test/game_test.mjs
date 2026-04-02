@@ -55,6 +55,7 @@ const { getRoundId, getRoundTime, getRoundPhase, getSecondsRemaining, buildResul
 const { validateGuess }    = await vite.ssrLoadModule("./lib/wordValidator.ts");
 const { getDb }            = await vite.ssrLoadModule("./lib/db.ts");
 const { GameServer }       = await vite.ssrLoadModule("./lib/gameServer.ts");
+const { ChatServer }       = await vite.ssrLoadModule("./lib/chatServer.ts");
 
 console.log(`${C.green}Modules loaded.${C.reset}\n`);
 
@@ -486,6 +487,62 @@ assert(cooldownResp.result === "cooldown", `Guess during cooldown returns "coold
 
 gs4.stop();
 gs2.stop();
+
+// ── 8. ChatServer ─────────────────────────────────────────────────────────────
+section("ChatServer");
+
+// Use a fresh instance (not the singleton) so tests are isolated
+const chat = new ChatServer();
+
+// Clean up any test messages from previous runs
+db.prepare("DELETE FROM chat_messages WHERE user_id IN (-8001, -8002)").run();
+
+// addMessage saves to DB and emits event
+let emittedEvent = null;
+chat.once("message", (ev) => { emittedEvent = ev; });
+
+const msg1 = chat.addMessage(-8001, "Tester1", "Hallo!", 4);
+assert(msg1 !== null,                            `addMessage returns saved message`);
+assert(msg1.username === "Tester1",             `Message has correct username`);
+assert(msg1.message === "Hallo!",               `Message has correct text`);
+assert(typeof msg1.id === "number",             `Message has numeric id`);
+assert(emittedEvent !== null,                   `"message" event emitted`);
+assert(emittedEvent.size === 4,                 `Event carries correct size (4)`);
+assert(emittedEvent.message.message === "Hallo!", `Event carries message payload`);
+
+// Size namespacing — message for size 5 doesn't appear in size 4 history
+chat.addMessage(-8002, "Tester2", "Size 5 msg", 5);
+chat.addMessage(-8001, "Tester1", "Size 4 msg", 4);
+
+const history4 = chat.getHistory(4);
+const history5 = chat.getHistory(5);
+
+const in4 = history4.some(m => m.message === "Size 4 msg");
+const notIn4 = !history4.some(m => m.message === "Size 5 msg");
+const in5 = history5.some(m => m.message === "Size 5 msg");
+const notIn5 = !history5.some(m => m.message === "Size 4 msg");
+
+assert(in4,    `Size 4 message appears in size 4 history`);
+assert(notIn4, `Size 5 message does NOT appear in size 4 history`);
+assert(in5,    `Size 5 message appears in size 5 history`);
+assert(notIn5, `Size 4 message does NOT appear in size 5 history`);
+
+// getHistory returns oldest first
+const ids4 = history4.map(m => m.id);
+assert(
+  ids4.every((id, i) => i === 0 || id > ids4[i - 1]),
+  `getHistory returns messages oldest-first`,
+);
+
+// Invalid messages rejected
+const nullMsg = chat.addMessage(-8001, "Tester1", "   ", 4); // whitespace only
+assert(nullMsg === null, `Whitespace-only message rejected`);
+
+const longMsg = chat.addMessage(-8001, "Tester1", "x".repeat(501), 4);
+assert(longMsg === null, `Message over 500 chars rejected`);
+
+// Clean up
+db.prepare("DELETE FROM chat_messages WHERE user_id IN (-8001, -8002)").run();
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 section("Summary");

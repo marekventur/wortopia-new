@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import type { Route } from "./+types/home";
 import Nav from "../components/Nav";
-import ChatProvider from "../components/ChatProvider";
 import MainAreaPositioner from "../components/MainAreaPositioner";
 import { useModalStore } from "../stores/modalStore";
 import CurrentField from "../components/CurrentField";
@@ -18,15 +17,22 @@ import AccountModal from "../components/modals/AccountModal";
 import RecoverModal from "../components/modals/RecoverModal";
 import RulesModal from "../components/modals/RulesModal";
 import HighscoreModal from "../components/modals/HighscoreModal";
+import { redirect } from "react-router";
 import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
+import GameProvider from "../components/GameProvider";
+import type { GameSize } from "../stores/gameStore";
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const sizeNum = Number(params.size);
+  if (sizeNum !== 4 && sizeNum !== 5) return redirect("/4");
+  const size = sizeNum as GameSize;
+
   const url = new URL(request.url);
   const openModal = url.searchParams.get("modal");
   const session = await getSession(request);
 
   if (session) {
-    return { session, openModal };
+    return { session, openModal, size };
   }
 
   // First visit — assign a guest ID and set cookie
@@ -35,13 +41,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const cookieHeader = await sessionCookie.serialize(guestToken);
 
   return Response.json(
-    { session: { type: "guest", guestId } as Session, openModal },
+    { session: { type: "guest", guestId } as Session, openModal, size },
     { headers: { "Set-Cookie": cookieHeader } }
   );
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { session, openModal: initialModal } = loaderData;
+  const { session, openModal: initialModal, size } = loaderData;
   const { openModal } = useModalStore();
 
   useEffect(() => {
@@ -49,9 +55,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   }, []);
 
   return (
-    <ChatProvider>
+    <GameProvider session={session} size={size}>
     <div className="container">
-      <div><Nav session={session} /></div>
+      <div><Nav session={session} size={size} /></div>
 
       <div className="row">
         {/* Small screen only: field sits above player list in normal flow */}
@@ -82,6 +88,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <RulesModal />
       <HighscoreModal />
     </div>
-    </ChatProvider>
+    </GameProvider>
   );
 }

@@ -43,16 +43,13 @@ if (DEVELOPMENT) {
   });
 
   // Mount WebSocket servers in dev (load via vite to get TS support)
-  const chatSource = await viteDevServer.ssrLoadModule("./lib/chatServer.ts");
-  const chatWss = chatSource.createChatServer(httpServer);
-
   const gameSource = await viteDevServer.ssrLoadModule("./lib/gameWsServer.ts");
   const { getGameServer } = await viteDevServer.ssrLoadModule("./lib/gameServer.ts");
   const gameServer = getGameServer();
   await gameServer.init();
   const gameWssMap = gameSource.createGameWsServer();
 
-  mountWsRouter(httpServer, chatWss, gameWssMap);
+  mountWsRouter(httpServer, gameWssMap);
 } else {
   console.log("Starting production server");
   app.use(
@@ -64,16 +61,13 @@ if (DEVELOPMENT) {
   const mod = await import(BUILD_PATH);
   app.use(mod.app);
 
-  const { createChatServer } = await import("./lib/chatServer.js");
-  const chatWss = createChatServer(httpServer);
-
   const { getGameServer } = await import("./lib/gameServer.js");
   const { createGameWsServer } = await import("./lib/gameWsServer.js");
   const gameServer = getGameServer();
   await gameServer.init();
   const gameWssMap = createGameWsServer();
 
-  mountWsRouter(httpServer, chatWss, gameWssMap);
+  mountWsRouter(httpServer, gameWssMap);
 }
 
 /**
@@ -83,16 +77,9 @@ if (DEVELOPMENT) {
  * listeners and send 400 for non-matching paths, clobbering each other.
  * The fix: use noServer:true everywhere and route manually here.
  */
-function mountWsRouter(server, chatWss, gameWssMap) {
+function mountWsRouter(server, gameWssMap) {
   server.on("upgrade", (req, socket, head) => {
     const pathname = new URL(req.url, "http://localhost").pathname;
-
-    if (pathname === "/ws/chat") {
-      chatWss.handleUpgrade(req, socket, head, (ws) => {
-        chatWss.emit("connection", ws, req);
-      });
-      return;
-    }
 
     const gameWss = gameWssMap.get(pathname);
     if (gameWss) {

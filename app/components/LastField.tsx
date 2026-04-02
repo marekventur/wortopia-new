@@ -1,76 +1,40 @@
-const lastField = [
-  ['E', 'W', 'T', 'E'],
-  ['A', 'I', 'E', 'H'],
-  ['T', 'M', 'E', 'M'],
-  ['R', 'I', 'G', 'B'],
-];
-
-const stats = { points: 105, words: 26 };
-
-const words = [
-  { word: 'AMT', length: 3, timesGuessed: 3 },
-  { word: 'AMA', length: 3, timesGuessed: 0 },
-  { word: 'ATMET', length: 5, timesGuessed: 1 },
-  { word: 'ATME', length: 4, timesGuessed: 2 },
-  { word: 'ATMETE', length: 6, timesGuessed: 0 },
-  { word: 'BEET', length: 4, timesGuessed: 0 },
-  { word: 'BIE', length: 3, timesGuessed: 0 },
-  { word: 'BEIM', length: 4, timesGuessed: 2 },
-  { word: 'BEITE', length: 5, timesGuessed: 0 },
-  { word: 'BEI', length: 3, timesGuessed: 1 },
-  { word: 'BEIS', length: 4, timesGuessed: 0 },
-  { word: 'EHE', length: 3, timesGuessed: 3 },
-  { word: 'EHR', length: 3, timesGuessed: 0 },
-  { word: 'EITRIGE', length: 7, timesGuessed: 0 },
-  { word: 'EIA', length: 3, timesGuessed: 0 },
-  { word: 'EMIR', length: 4, timesGuessed: 0 },
-  { word: 'EWE', length: 3, timesGuessed: 1 },
-  { word: 'GEHE', length: 4, timesGuessed: 0 },
-  { word: 'GEHEIM', length: 6, timesGuessed: 1 },
-  { word: 'GEHT', length: 4, timesGuessed: 2 },
-  { word: 'GEI', length: 3, timesGuessed: 0 },
-  { word: 'GEIE', length: 4, timesGuessed: 0 },
-  { word: 'GEIT', length: 4, timesGuessed: 0 },
-  { word: 'GEITE', length: 5, timesGuessed: 0 },
-  { word: 'GEHEN', length: 5, timesGuessed: 0 },
-  { word: 'GEHET', length: 5, timesGuessed: 0 },
-  { word: 'HEI', length: 3, timesGuessed: 2 },
-  { word: 'HEIM', length: 4, timesGuessed: 3 },
-  { word: 'HEIMAT', length: 6, timesGuessed: 0 },
-  { word: 'HEIME', length: 5, timesGuessed: 1 },
-  { word: 'HEIA', length: 4, timesGuessed: 0 },
-  { word: 'HEG', length: 3, timesGuessed: 0 },
-  { word: 'ITEM', length: 4, timesGuessed: 0 },
-  { word: 'MATE', length: 4, timesGuessed: 0 },
-  { word: 'METE', length: 4, timesGuessed: 0 },
-  { word: 'MIETE', length: 5, timesGuessed: 2 },
-  { word: 'MIR', length: 3, timesGuessed: 1 },
-  { word: 'MIET', length: 4, timesGuessed: 1 },
-  { word: 'RIEB', length: 4, timesGuessed: 0 },
-  { word: 'RITA', length: 4, timesGuessed: 0 },
-  { word: 'REIM', length: 4, timesGuessed: 1 },
-  { word: 'TEMA', length: 4, timesGuessed: 0 },
-  { word: 'TIME', length: 4, timesGuessed: 0 },
-  { word: 'TIMER', length: 5, timesGuessed: 0 },
-  { word: 'TRIEB', length: 5, timesGuessed: 0 },
-  { word: 'WEIT', length: 4, timesGuessed: 2 },
-  { word: 'WEITE', length: 5, timesGuessed: 1 },
-  { word: 'WEM', length: 3, timesGuessed: 1 },
-  { word: 'WEHE', length: 4, timesGuessed: 0 },
-  { word: 'WEHTE', length: 5, timesGuessed: 0 },
-  { word: 'WEHTEM', length: 6, timesGuessed: 0 },
-  { word: 'WIE', length: 3, timesGuessed: 2 },
-  { word: 'WEG', length: 3, timesGuessed: 0 },
-];
+import { useGameStore } from "../stores/gameStore.js";
+import { fieldToGrid } from "../../lib/fieldContains.js";
 
 export default function LastField() {
+  const lastRound = useGameStore((s) => s.lastRound);
+  const myUsername = useGameStore((s) => s.myUsername);
+
+  if (!lastRound) return null;
+
+  const size = lastRound.size;
+  const grid = fieldToGrid(lastRound.field, size);
+  const { players, words } = lastRound.results;
+
+  const myStats = players.find((p) => p.username === myUsername);
+  const myWords = new Set(
+    words.filter((w) => w.username === myUsername).map((w) => w.word.toUpperCase())
+  );
+
+  // Count how many players guessed each word
+  const wordCounts = new Map<string, number>();
+  for (const w of words) {
+    const key = w.word.toUpperCase();
+    wordCounts.set(key, (wordCounts.get(key) ?? 0) + 1);
+  }
+
+  // Unique words sorted by length desc, then alphabetically
+  const uniqueWords = [...new Set(words.map((w) => w.word.toUpperCase()))].sort(
+    (a, b) => b.length - a.length || a.localeCompare(b)
+  );
+
   return (
     <div>
       <div className="panel panel-default last-round">
         <div className="panel-heading">
           <table className="field">
             <tbody>
-              {lastField.map((row, y) => (
+              {grid.map((row, y) => (
                 <tr key={y}>
                   {row.map((cell, x) => (
                     <td key={x} className={`cell cell--${x}-${y}`}>{cell}</td>
@@ -83,21 +47,28 @@ export default function LastField() {
           <div>
             <p>Letzte Runde</p>
             <small>
-              {stats.points} Punkte<br />
-              {stats.words} Wörter
+              {myStats ? (
+                <>{myStats.points} Punkte<br />{myStats.words} Wörter</>
+              ) : (
+                <>– Punkte<br />– Wörter</>
+              )}
             </small>
           </div>
         </div>
         <div className="panel-body">
-          {words.map((word, i) => (
-            <span key={i}>
-              <span
-                className={`word word--length-${word.length} word--word-${word.word.toLowerCase()} ${word.timesGuessed ? `word--guessed word--times-guessed-${word.timesGuessed}` : 'word--not-guessed'}`}
-              >
-                {word.word}
-              </span>{' '}
-            </span>
-          ))}
+          {uniqueWords.map((word, i) => {
+            const count = wordCounts.get(word) ?? 0;
+            const guessed = myWords.has(word);
+            return (
+              <span key={i}>
+                <span
+                  className={`word word--length-${word.length} word--word-${word.toLowerCase()} ${guessed ? `word--guessed word--times-guessed-${count}` : 'word--not-guessed'}`}
+                >
+                  {word}
+                </span>{' '}
+              </span>
+            );
+          })}
         </div>
       </div>
     </div>
