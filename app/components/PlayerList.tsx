@@ -5,6 +5,7 @@ export default function PlayerList() {
   const lastRound = useGameStore((s) => s.lastRound);
   const myUsername = useGameStore((s) => s.myUsername);
   const setHoveredUserId = useGameStore((s) => s.setHoveredUserId);
+  const hoveredWordGuessedBy = useGameStore((s) => s.hoveredWordGuessedBy);
 
   const isCooldown = currentRound?.state === 'cooldown';
   const players = (isCooldown ? currentRound?.results.players : lastRound?.results.players) ?? [];
@@ -18,14 +19,14 @@ export default function PlayerList() {
         {players.map((player, i) => (
           <li
             key={i}
-            className={`list-group-item${player.username === myUsername ? ' active' : ''}`}
+            className={`list-group-item${hoveredWordGuessedBy?.includes(player.userId) ? ' player--highlight' : ''}`}
             onMouseEnter={() => setHoveredUserId(player.userId)}
             onMouseLeave={() => setHoveredUserId(null)}
           >
             <span className="badge">
               {player.points}
             </span>
-            {player.username}
+            {player.username === myUsername ? <strong>{player.username}</strong> : player.username}
           </li>
         ))}
       </ul>

@@ -47,6 +47,9 @@ type GameStore = {
   hoveredUserId: number | null;
   setHoveredUserId: (id: number | null) => void;
 
+  hoveredWordGuessedBy: number[] | null;
+  setHoveredWordGuessedBy: (ids: number[] | null) => void;
+
   // ── Public ──────────────────────────────────────────────────────────────────
   guess: (word: string) => void;
 };
@@ -69,6 +72,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastGuessResult: null,
   hoveredUserId: null,
   setHoveredUserId: (hoveredUserId) => set({ hoveredUserId }),
+  hoveredWordGuessedBy: null,
+  setHoveredWordGuessedBy: (hoveredWordGuessedBy) => set({ hoveredWordGuessedBy }),
 
   _send: null,
   _setSend: (fn) => set({ _send: fn }),

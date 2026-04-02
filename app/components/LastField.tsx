@@ -5,6 +5,7 @@ export default function LastField() {
   const lastRound = useGameStore((s) => s.lastRound);
   const myUserId = useGameStore((s) => s.myUserId);
   const hoveredUserId = useGameStore((s) => s.hoveredUserId);
+  const setHoveredWordGuessedBy = useGameStore((s) => s.setHoveredWordGuessedBy);
 
   if (!lastRound) return null;
 
@@ -52,6 +53,8 @@ export default function LastField() {
                 <span
                   className={`word word--length-${word.word.length} word--word-${word.word.toLowerCase()} ${guessedByMe ? `word--guessed word--times-guessed-${count}` : 'word--not-guessed'}${isHighlighted ? ' word--highlight' : ''}`}
                   title={word.description ?? undefined}
+                  onMouseEnter={() => setHoveredWordGuessedBy(guessedBy)}
+                  onMouseLeave={() => setHoveredWordGuessedBy(null)}
                 >
                   {word.word.toUpperCase()}
                 </span>{' '}

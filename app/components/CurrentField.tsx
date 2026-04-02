@@ -35,6 +35,11 @@ export default function CurrentField() {
   const startSwipingFieldRef = useRef<Cell | null>(null);
   const scaleRef = useRef(1);
 
+  // Focus input when game becomes ongoing (new round or on connect)
+  useEffect(() => {
+    if (!isCooldown) inputRef.current?.focus();
+  }, [isCooldown]);
+
   // Animate on guess result
   useEffect(() => {
     if (!lastGuessResult) return;

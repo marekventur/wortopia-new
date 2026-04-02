@@ -245,3 +245,7 @@ body {
   background-color: #428bca;
   color: #fff;
 }
+
+.player--highlight {
+  color: #428bca;
+}
