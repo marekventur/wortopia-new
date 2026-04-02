@@ -15,7 +15,7 @@ type Props = {
 export default function GameProvider({ session, size, children }: Props) {
   // Only read actions — no subscription needed here.
   const { _setConnected, _applyUpdate, _applyTick, _applyGuessResult,
-          _setSend, setMyUsername, setSize } = useGameStore.getState();
+          _setSend, setMyUsername, setMyUserId, setSize } = useGameStore.getState();
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -23,9 +23,12 @@ export default function GameProvider({ session, size, children }: Props) {
 
   const username =
     session.type === "user" ? session.user.name : `Gast ${session.guestId}`;
+  const userId =
+    session.type === "user" ? session.user.id : -session.guestId;
 
   useEffect(() => {
     setMyUsername(username);
+    setMyUserId(userId);
   }, [username]);
 
   useEffect(() => {

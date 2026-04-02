@@ -15,9 +15,23 @@ export type PlayerResult = {
 
 export type RoundResults = {
   players: PlayerResult[];
-  /** For current_round: only the requesting player's correct words.
-   *  For last_round: every correct word from anyone, with username. */
+  /** Current round only: the requesting player's own correct words. */
   words: { word: string; username: string }[];
+};
+
+/** One entry in the all-words list sent with last_round. */
+export type WordDetail = {
+  word: string;
+  description: string | null;
+  points: number;
+  /** User IDs of every player who guessed this word correctly. Empty if no-one did. */
+  guessedBy: number[];
+};
+
+export type LastRoundResults = {
+  players: PlayerResult[];
+  /** ALL valid words for the field, sorted most-guessed → least-guessed. */
+  words: WordDetail[];
 };
 
 export type CurrentRoundInfo = {
@@ -33,7 +47,7 @@ export type LastRoundInfo = {
   id: number;
   size: number;
   field: string;
-  results: RoundResults;
+  results: LastRoundResults;
 };
 
 // ── Incoming WS message shapes ────────────────────────────────────────────────
@@ -54,6 +68,7 @@ export type WsGuessResultMsg = {
   word: string;
   result: string;
   points: number;
+  description: string | null;
   player_results: RoundResults;
 };
 

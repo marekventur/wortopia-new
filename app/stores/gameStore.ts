@@ -14,6 +14,7 @@ export type GuessEntry = {
   word: string;
   result: string;
   points: number;
+  description: string | null;
 };
 
 type GameStore = {
@@ -22,6 +23,9 @@ type GameStore = {
 
   myUsername: string | null;
   setMyUsername: (username: string) => void;
+
+  myUserId: number | null;
+  setMyUserId: (userId: number) => void;
 
   connected: boolean;
   currentRound: CurrentRoundInfo | null;
@@ -40,6 +44,9 @@ type GameStore = {
   _send: ((data: string) => void) | null;
   _setSend: (fn: ((data: string) => void) | null) => void;
 
+  hoveredUserId: number | null;
+  setHoveredUserId: (id: number | null) => void;
+
   // ── Public ──────────────────────────────────────────────────────────────────
   guess: (word: string) => void;
 };
@@ -52,11 +59,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   myUsername: null,
   setMyUsername: (myUsername) => set({ myUsername }),
 
+  myUserId: null,
+  setMyUserId: (myUserId) => set({ myUserId }),
+
   connected: false,
   currentRound: null,
   lastRound: null,
   myGuesses: [],
   lastGuessResult: null,
+  hoveredUserId: null,
+  setHoveredUserId: (hoveredUserId) => set({ hoveredUserId }),
 
   _send: null,
   _setSend: (fn) => set({ _send: fn }),
@@ -75,6 +87,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         word: w.word.toUpperCase(),
         result: "correct",
         points: SCORES[w.word.length] ?? 0,
+        description: null,
       }));
     }
 
@@ -102,6 +115,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       word: msg.word.toUpperCase(),
       result: msg.result,
       points: msg.points,
+      description: msg.description,
     };
     set((state) => ({
       myGuesses: [entry, ...state.myGuesses],

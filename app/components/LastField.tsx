@@ -3,7 +3,8 @@ import { fieldToGrid } from "../../lib/fieldContains.js";
 
 export default function LastField() {
   const lastRound = useGameStore((s) => s.lastRound);
-  const myUsername = useGameStore((s) => s.myUsername);
+  const myUserId = useGameStore((s) => s.myUserId);
+  const hoveredUserId = useGameStore((s) => s.hoveredUserId);
 
   if (!lastRound) return null;
 
@@ -11,22 +12,7 @@ export default function LastField() {
   const grid = fieldToGrid(lastRound.field, size);
   const { players, words } = lastRound.results;
 
-  const myStats = players.find((p) => p.username === myUsername);
-  const myWords = new Set(
-    words.filter((w) => w.username === myUsername).map((w) => w.word.toUpperCase())
-  );
-
-  // Count how many players guessed each word
-  const wordCounts = new Map<string, number>();
-  for (const w of words) {
-    const key = w.word.toUpperCase();
-    wordCounts.set(key, (wordCounts.get(key) ?? 0) + 1);
-  }
-
-  // Unique words sorted by length desc, then alphabetically
-  const uniqueWords = [...new Set(words.map((w) => w.word.toUpperCase()))].sort(
-    (a, b) => b.length - a.length || a.localeCompare(b)
-  );
+  const myStats = players.find((p) => p.userId === myUserId);
 
   return (
     <div>
@@ -56,15 +42,18 @@ export default function LastField() {
           </div>
         </div>
         <div className="panel-body">
-          {uniqueWords.map((word, i) => {
-            const count = wordCounts.get(word) ?? 0;
-            const guessed = myWords.has(word);
+          {words.map((word, i) => {
+            const guessedBy = word.guessedBy ?? [];
+            const guessedByMe = myUserId !== null && guessedBy.includes(myUserId);
+            const count = guessedBy.length;
+            const isHighlighted = hoveredUserId !== null && guessedBy.includes(hoveredUserId);
             return (
               <span key={i}>
                 <span
-                  className={`word word--length-${word.length} word--word-${word.toLowerCase()} ${guessed ? `word--guessed word--times-guessed-${count}` : 'word--not-guessed'}`}
+                  className={`word word--length-${word.word.length} word--word-${word.word.toLowerCase()} ${guessedByMe ? `word--guessed word--times-guessed-${count}` : 'word--not-guessed'}${isHighlighted ? ' word--highlight' : ''}`}
+                  title={word.description ?? undefined}
                 >
-                  {word}
+                  {word.word.toUpperCase()}
                 </span>{' '}
               </span>
             );

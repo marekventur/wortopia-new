@@ -1,4 +1,8 @@
 import { ROUND_DURATION, GAME_DURATION, SCORES } from "./gameConfig.js";
+import { getDb } from "./db.js";
+import type { WordDetail, LastRoundResults } from "./gameTypes.js";
+
+export type { WordDetail, LastRoundResults };
 
 export type RoundPhase = "ongoing" | "cooldown";
 
@@ -86,6 +90,65 @@ export function buildResults(
       : guesses
           .filter((g) => g.result === "correct")
           .map((g) => ({ word: g.word, username: g.username }));
+
+  return { players, words };
+}
+
+/**
+ * Builds the full word list for a completed round.
+ * Includes ALL valid words (not just guessed ones), with description, points,
+ * and the list of user IDs who guessed each word correctly.
+ * Sorted most-guessed → least-guessed, then alphabetically.
+ */
+export function buildLastRoundResults(
+  guesses: GuessRow[],
+  validWords: Set<string>,
+): LastRoundResults {
+  // ── Leaderboard (same as buildResults) ────────────────────────────────────
+  const playerMap = new Map<number, { userId: number; username: string; words: number; points: number }>();
+  for (const g of guesses) {
+    if (g.result !== "correct") continue;
+    if (!playerMap.has(g.user_id)) {
+      playerMap.set(g.user_id, { userId: g.user_id, username: g.username, words: 0, points: 0 });
+    }
+    const p = playerMap.get(g.user_id)!;
+    p.words++;
+    p.points += g.points;
+  }
+  const players = [...playerMap.values()].sort((a, b) => b.points - a.points);
+
+  // ── Per-word guess map: word → userId[] ────────────────────────────────────
+  const guessedByMap = new Map<string, number[]>();
+  for (const g of guesses) {
+    if (g.result !== "correct") continue;
+    const key = g.word.toLowerCase();
+    if (!guessedByMap.has(key)) guessedByMap.set(key, []);
+    guessedByMap.get(key)!.push(g.user_id);
+  }
+
+  // ── Fetch descriptions for all valid words ─────────────────────────────────
+  const wordArray = [...validWords];
+  const descriptions = new Map<string, string | null>();
+  if (wordArray.length > 0) {
+    const placeholders = wordArray.map(() => "?").join(",");
+    const rows = getDb()
+      .prepare(`SELECT word, description FROM words WHERE word IN (${placeholders})`)
+      .all(...wordArray) as { word: string; description: string | null }[];
+    for (const row of rows) descriptions.set(row.word, row.description ?? null);
+  }
+
+  // ── Build WordDetail list ──────────────────────────────────────────────────
+  const words: WordDetail[] = wordArray.map((word) => ({
+    word,
+    description: descriptions.get(word) ?? null,
+    points: getScore(word.length),
+    guessedBy: guessedByMap.get(word) ?? [],
+  }));
+
+  // Most-guessed first, then alphabetically
+  words.sort(
+    (a, b) => b.guessedBy.length - a.guessedBy.length || a.word.localeCompare(b.word),
+  );
 
   return { players, words };
 }

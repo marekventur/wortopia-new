@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useGameStore } from "../stores/gameStore";
 import type { Route } from "./+types/home";
 import Nav from "../components/Nav";
 import MainAreaPositioner from "../components/MainAreaPositioner";
@@ -49,6 +50,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { session, openModal: initialModal, size } = loaderData;
   const { openModal } = useModalStore();
+  const isCooldown = useGameStore((s) => s.currentRound?.state === 'cooldown');
 
   useEffect(() => {
     if (initialModal) openModal(initialModal);
@@ -61,12 +63,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       <div className="row">
         {/* Small screen only: field sits above player list in normal flow */}
-        <div className="col-xs-12 hidden-md hidden-lg">
-          <CurrentField />
-        </div>
+        {!isCooldown && (
+          <div className="col-xs-12 hidden-md hidden-lg">
+            <CurrentField />
+          </div>
+        )}
 
         <MainAreaPositioner>
-          <CurrentField />
+          {!isCooldown && <CurrentField />}
           <div className="chat-wrapper"><Chat session={session} /></div>
         </MainAreaPositioner>
         <div className="col-md-3 col-md-pull-6">

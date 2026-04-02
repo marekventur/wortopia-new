@@ -6,8 +6,10 @@ import {
   getRoundPhase,
   getSecondsRemaining,
   buildResults,
+  buildLastRoundResults,
   type GuessRow,
   type RoundResults,
+  type LastRoundResults,
 } from "./gameState.js";
 import { validateGuess } from "./wordValidator.js";
 import { SIZES, ROUND_DURATION, GAME_DURATION, type GameSize } from "./gameConfig.js";
@@ -35,7 +37,7 @@ export type LastRoundPayload = {
   id: number;
   size: number;
   field: string;
-  results: RoundResults;
+  results: LastRoundResults;
 };
 
 export type TickPayload = {
@@ -51,6 +53,7 @@ export type GuessResponse = {
   word: string;
   result: string;
   points: number;
+  description: string | null;
   player_results: RoundResults;
 };
 
@@ -121,12 +124,27 @@ export class GameServer extends EventEmitter {
 
       const phase = getRoundPhase(roundTime);
 
+      // Populate lastRound from the previous round's DB data on startup
+      const prevRoundId = roundId - 1;
+      const prevField = generateField(prevRoundId, size);
+      const prevValidWords = computeValidWords(prevField, size);
+      const prevGuesses = this.loadGuesses(prevRoundId, size);
+      const lastRound: LastRoundPayload | null =
+        prevValidWords.size > 0
+          ? {
+              id: prevRoundId,
+              size,
+              field: prevField,
+              results: buildLastRoundResults(prevGuesses, prevValidWords),
+            }
+          : null;
+
       this.state.set(size, {
         current: { roundId, field: currentField, validWords: currentValidWords },
         next: { roundId: nextRoundId, field: nextField, validWords: nextValidWords },
         prevRoundId: roundId,
         prevPhase: phase,
-        lastRound: null,
+        lastRound,
         tickTimer: null,
       });
     }
@@ -161,6 +179,7 @@ export class GameServer extends EventEmitter {
     if (roundId !== s.prevRoundId) {
       const finishedRoundId = s.prevRoundId;
       const finishedField = s.current.field;
+      const finishedValidWords = s.current.validWords; // save before promoting
 
       // Promote next → current
       if (s.next && s.next.roundId === roundId) {
@@ -173,13 +192,13 @@ export class GameServer extends EventEmitter {
       }
       s.next = null;
 
-      // Fetch full results for the just-finished round
+      // Build full results for the just-finished round (all valid words)
       const finishedGuesses = this.loadGuesses(finishedRoundId, size);
       s.lastRound = {
         id: finishedRoundId,
         size,
         field: finishedField,
-        results: buildResults(finishedGuesses),
+        results: buildLastRoundResults(finishedGuesses, finishedValidWords),
       };
 
       s.prevRoundId = roundId;
@@ -196,13 +215,17 @@ export class GameServer extends EventEmitter {
     else if (s.prevPhase === "ongoing" && phase === "cooldown") {
       s.prevPhase = phase;
 
-      // Fetch current round results (full)
+      // Build lastRound with ALL valid words for the now-ending round
       const guesses = this.loadGuesses(roundId, size);
+      s.lastRound = {
+        id: roundId,
+        size,
+        field: s.current.field,
+        results: buildLastRoundResults(guesses, s.current.validWords),
+      };
 
-      // Emit update with cooldown state + full results
+      // Emit update (lastRound now populated, current_round shows cooldown)
       const updatePayload = this.buildUpdatePayload(size, undefined);
-      // Attach full current round results for the cooldown broadcast
-      updatePayload.current_round.results = buildResults(guesses);
       this.emit(`update:${size}`, updatePayload);
 
       // Kick off next-round computation
@@ -270,6 +293,7 @@ export class GameServer extends EventEmitter {
         word,
         result: "cooldown",
         points: 0,
+        description: null,
         player_results: buildResults(this.loadGuesses(roundId, size), userId),
       };
     }
@@ -295,7 +319,15 @@ export class GameServer extends EventEmitter {
       userId,
     );
 
-    return { word, result, points, player_results: playerResults };
+    let description: string | null = null;
+    if (result === "correct") {
+      const row = getDb()
+        .prepare("SELECT description FROM words WHERE word = ?")
+        .get(word.toLowerCase()) as { description: string | null } | undefined;
+      description = row?.description ?? null;
+    }
+
+    return { word, result, points, description, player_results: playerResults };
   }
 
   /** Load the full guess history for a round+size from DB. */
