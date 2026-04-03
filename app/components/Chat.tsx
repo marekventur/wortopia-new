@@ -46,7 +46,10 @@ export default function Chat({ session }: Props) {
         <div className="panel-body chat-content" ref={bodyRef}>
           {messages.map((msg) => (
             <div key={msg.id}>
-              <strong>{msg.username}</strong>: {msg.message}
+              <span style={{ color: "#aaa", marginRight: 6 }}>
+                {new Date(msg.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <strong>{msg.username}</strong> {msg.message}
             </div>
           ))}
         </div>
