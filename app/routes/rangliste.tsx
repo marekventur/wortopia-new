@@ -205,7 +205,7 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
           </table>
         )}
         <p style={{ color: "#888", fontSize: "0.9em" }}>
-          Top 100 · mindestens 3 Runden · geordnet nach Ergebnis
+          Top 100 · geordnet nach Ergebnis
           {generatedAt && (
             <> · Stand: {new Date(generatedAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</>
           )}
