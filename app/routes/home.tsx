@@ -13,42 +13,35 @@ import { redirect } from "react-router";
 import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
 import GameProvider from "../components/GameProvider";
 import type { GameSize } from "../stores/gameStore";
-import { getGameServer, type UpdatePayload } from "../../lib/gameServer.js";
-import { getChatServer } from "../../lib/chatServer.js";
-import type { ChatMessage } from "../../lib/chatTypes.js";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const sizeNum = Number(params.size);
   if (sizeNum !== 4 && sizeNum !== 5) return redirect("/4");
   const size = sizeNum as GameSize;
 
-  let session = await getSession(request);
-  let cookieHeader: string | undefined;
+  const session = await getSession(request);
 
-  if (!session) {
-    // First visit — assign a guest ID and set cookie
-    const guestId = Math.floor(Math.random() * 100_001);
-    const guestToken = createGuestToken(guestId);
-    cookieHeader = await sessionCookie.serialize(guestToken);
-    session = { type: "guest", guestId } as Session;
+  if (session) {
+    return { session, size };
   }
 
-  const userId = session.type === "user" ? session.user.id : -session.guestId;
-  const initialGameState: UpdatePayload = getGameServer().getInitialPayload(size, userId);
-  const initialChat: ChatMessage[] = getChatServer().getHistory(size);
+  // First visit — assign a guest ID and set cookie
+  const guestId = Math.floor(Math.random() * 100_001);
+  const guestToken = createGuestToken(guestId);
+  const cookieHeader = await sessionCookie.serialize(guestToken);
 
-  const payload = { session, size, initialGameState, initialChat };
-  return cookieHeader
-    ? Response.json(payload, { headers: { "Set-Cookie": cookieHeader } })
-    : payload;
+  return Response.json(
+    { session: { type: "guest", guestId } as Session, size },
+    { headers: { "Set-Cookie": cookieHeader } }
+  );
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { session, size, initialGameState, initialChat } = loaderData;
+  const { session, size } = loaderData;
   const isCooldown = useGameStore((s) => s.currentRound?.state === 'cooldown');
 
   return (
-    <GameProvider session={session} size={size} initialGameState={initialGameState} initialChat={initialChat}>
+    <GameProvider session={session} size={size}>
     <div className="container">
       <div><Nav session={session} size={size} /></div>
 
