@@ -29,18 +29,24 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const db = getDb();
 
-  // Global leaderboard: read from pre-computed cache (refreshed nightly at 3am)
-  const leaderboard = db.prepare(`
-    SELECT rank, name, team, games, pct, avg_words, best_round
-    FROM leaderboard_cache
-    WHERE days = ? AND size = ?
-    ORDER BY rank ASC
-  `).all(days, size) as LeaderboardRow[];
+  // Global leaderboard: rank from cache at query time so sort order can change
+  // without a cache rebuild. Include logged-in user even if outside top 100.
+  const loggedInName = session.type === "user" ? session.user.name : null;
 
-  const generatedAt = leaderboard.length > 0
-    ? (db.prepare("SELECT generated_at FROM leaderboard_cache WHERE days = ? AND size = ? LIMIT 1")
-        .get(days, size) as { generated_at: string } | undefined)?.generated_at ?? null
-    : null;
+  const leaderboard = db.prepare(`
+    WITH ranked AS (
+      SELECT name, team, games, pct, avg_words, best_round, generated_at,
+             ROW_NUMBER() OVER (ORDER BY pct DESC, games DESC) AS rank
+      FROM leaderboard_cache
+      WHERE days = ? AND size = ?
+    )
+    SELECT rank, name, team, games, pct, avg_words, best_round, generated_at
+    FROM ranked
+    WHERE rank <= 100 OR name = ?
+    ORDER BY rank ASC
+  `).all(days, size, loggedInName) as (LeaderboardRow & { generated_at: string })[];
+
+  const generatedAt = leaderboard[0]?.generated_at ?? null;
 
   // Personal stats: live query, fast because it filters by user_id first
   let personal: PersonalRow | null = null;
@@ -67,7 +73,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const headers = cookieHeader ? { "Set-Cookie": cookieHeader } : undefined;
-  const payload = { session, days, size, leaderboard, personal, generatedAt };
+  const payload = { session, days, size, leaderboard, personal, generatedAt, loggedInName };
   return headers ? Response.json(payload, { headers }) : payload;
 }
 
@@ -86,8 +92,7 @@ const SIZE_OPTIONS = [
 ];
 
 export default function Rangliste({ loaderData }: Route.ComponentProps) {
-  const { session, days, size, leaderboard, personal, generatedAt } = loaderData;
-  const loggedInName = session.type === "user" ? session.user.name : null;
+  const { session, days, size, leaderboard, personal, generatedAt, loggedInName } = loaderData;
 
   function filterLink(newDays: number, newSize: number) {
     return `/rangliste?days=${newDays}&size=${newSize}`;
@@ -172,22 +177,29 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
               </tr>
             </thead>
             <tbody>
-              {leaderboard.map((row) => (
-                <tr key={row.name} style={row.name === loggedInName ? { fontWeight: "bold" } : undefined}>
-                  <td>{row.rank}</td>
-                  <td>
-                    {row.name}
-                    {row.team && (
-                      <span className="label label-default" style={{ marginLeft: 6, fontWeight: "normal" }}>
-                        {row.team}
-                      </span>
-                    )}
-                  </td>
-                  <td>{row.games}</td>
-                  <td>{row.pct}%</td>
-                  <td>{row.avg_words.toFixed(1)}</td>
-                  <td>{row.best_round}</td>
-                </tr>
+              {leaderboard.map((row, i) => (
+                <>
+                  {row.rank > 100 && i > 0 && (
+                    <tr key={`gap-${row.rank}`}>
+                      <td colSpan={6} style={{ textAlign: "center", color: "#aaa", padding: "4px 0", borderTop: "1px dashed #ddd" }}>…</td>
+                    </tr>
+                  )}
+                  <tr key={row.name} style={row.name === loggedInName ? { fontWeight: "bold" } : undefined}>
+                    <td>{row.rank}</td>
+                    <td>
+                      {row.name}
+                      {row.team && (
+                        <span className="label label-default" style={{ marginLeft: 6, fontWeight: "normal" }}>
+                          {row.team}
+                        </span>
+                      )}
+                    </td>
+                    <td>{row.games}</td>
+                    <td>{row.pct}%</td>
+                    <td>{row.avg_words.toFixed(1)}</td>
+                    <td>{row.best_round}</td>
+                  </tr>
+                </>
               ))}
             </tbody>
           </table>

@@ -8,8 +8,8 @@ export function refreshLeaderboardCache(): void {
   const generatedAt = new Date().toISOString();
 
   const insert = db.prepare(`
-    INSERT INTO leaderboard_cache (days, size, rank, name, team, games, pct, avg_words, best_round, generated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO leaderboard_cache (days, size, name, team, games, pct, avg_words, best_round, generated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const refreshOne = db.transaction((days: number, size: number) => {
@@ -40,7 +40,7 @@ export function refreshLeaderboardCache(): void {
       GROUP BY r.user_id
       HAVING games >= 3
       ORDER BY pct DESC
-      LIMIT 100
+      LIMIT 1000
     `).all(...params) as Array<{
       name: string;
       team: string | null;
@@ -52,8 +52,8 @@ export function refreshLeaderboardCache(): void {
 
     db.prepare("DELETE FROM leaderboard_cache WHERE days = ? AND size = ?").run(days, size);
 
-    rows.forEach((row, i) => {
-      insert.run(days, size, i + 1, row.name, row.team, row.games, row.pct, row.avg_words, row.best_round, generatedAt);
+    rows.forEach((row) => {
+      insert.run(days, size, row.name, row.team, row.games, row.pct, row.avg_words, row.best_round, generatedAt);
     });
 
     console.log(`[leaderboard] days=${days} size=${size}: ${rows.length} rows`);

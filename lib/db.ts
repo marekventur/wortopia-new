@@ -84,7 +84,6 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS leaderboard_cache (
     days         INTEGER NOT NULL,
     size         INTEGER NOT NULL,
-    rank         INTEGER NOT NULL,
     name         TEXT    NOT NULL,
     team         TEXT,
     games        INTEGER NOT NULL,
@@ -92,7 +91,7 @@ const SCHEMA = `
     avg_words    REAL    NOT NULL,
     best_round   INTEGER NOT NULL,
     generated_at TEXT    NOT NULL,
-    PRIMARY KEY (days, size, rank)
+    PRIMARY KEY (days, size, name)
   );
 
   CREATE TABLE IF NOT EXISTS muted_users (
