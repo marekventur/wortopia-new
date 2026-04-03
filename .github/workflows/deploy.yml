@@ -24,7 +24,7 @@ jobs:
       - name: Deploy
         env:
           SSH_PRIVATE_KEY_CONTENT: ${{ secrets.SSH_PRIVATE_KEY }}
-          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
+          ENV_FILE_CONTENT: ${{ vars.ENV_FILE }}
         run: |
           if [[ -z "$SSH_PRIVATE_KEY_CONTENT" ]]; then
             echo "ERROR: SSH_PRIVATE_KEY secret is not set"
