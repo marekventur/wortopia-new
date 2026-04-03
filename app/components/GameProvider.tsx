@@ -3,16 +3,20 @@ import { useGameStore, type GameSize } from "../stores/gameStore";
 import { useChatStore } from "../stores/chatStore";
 import type { WsIncomingMsg } from "../../lib/gameTypes.js";
 import type { Session } from "../../lib/session.js";
+import type { UpdatePayload } from "../../lib/gameServer.js";
+import type { ChatMessage } from "../../lib/chatTypes.js";
 
 const RECONNECT_DELAY_MS = 3000;
 
 type Props = {
   session: Session;
   size: GameSize;
+  initialGameState: UpdatePayload;
+  initialChat: ChatMessage[];
   children: React.ReactNode;
 };
 
-export default function GameProvider({ session, size, children }: Props) {
+export default function GameProvider({ session, size, initialGameState, initialChat, children }: Props) {
   // Only read actions — no subscription needed here.
   const { _setConnected, _applyUpdate, _applyTick, _applyGuessResult,
           _setSend, setMyUsername, setMyUserId, setSize } = useGameStore.getState();
@@ -25,6 +29,16 @@ export default function GameProvider({ session, size, children }: Props) {
     session.type === "user" ? session.user.name : `Gast ${session.guestId}`;
   const userId =
     session.type === "user" ? session.user.id : -session.guestId;
+
+  // Seed stores synchronously during first render so SSR HTML already has
+  // game state and there is no empty-state flash before the WS connects.
+  const seeded = useRef(false);
+  if (!seeded.current) {
+    seeded.current = true;
+    useGameStore.setState({ myUsername: username, myUserId: userId, size });
+    _applyUpdate({ type: "update", ...initialGameState });
+    useChatStore.getState().setMessages(initialChat);
+  }
 
   useEffect(() => {
     setMyUsername(username);
