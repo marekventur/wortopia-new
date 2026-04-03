@@ -395,8 +395,8 @@ export default function CurrentField() {
             </tbody>
           </table>
 
-          <div className={`giant-tick visible-xs-block visible-sm-block hidden-md hidden-lg${tickHighlight ? ' highlight' : ''}`}>✓</div>
-          <div className={`giant-cross visible-xs-block visible-sm-block hidden-md hidden-lg${crossHighlight ? ' highlight' : ''}`}>✗</div>
+          <div className={`giant-tick${tickHighlight ? ' highlight' : ''}`}>✓</div>
+          <div className={`giant-cross${crossHighlight ? ' highlight' : ''}`}>✗</div>
 
           <canvas
             ref={canvasRef}

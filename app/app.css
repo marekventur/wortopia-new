@@ -119,13 +119,23 @@ body {
 .field-style--default .current-field .giant-tick,
 .field-style--default .current-field .giant-cross {
   position: absolute;
-  top: 0;
+  top: 50%;
   left: 0;
   width: 100%;
   text-align: center;
-  font-size: 231px;
+  font-size: 180px;
+  line-height: 1;
+  transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
+}
+
+.field-style--default .current-field .giant-tick {
+  color: #5cb85c;
+}
+
+.field-style--default .current-field .giant-cross {
+  color: #d9534f;
 }
 
 .field-style--default .current-field .giant-tick.highlight,
@@ -134,9 +144,9 @@ body {
 }
 
 @keyframes field-style-default-highlight {
-  0%   { opacity: 0; font-size: 200px; }
-  50%  { opacity: 0.7; }
-  100% { opacity: 0; font-size: 330px; }
+  0%   { opacity: 0; transform: translateY(-50%) scale(0.85); }
+  40%  { opacity: 0.75; }
+  100% { opacity: 0; transform: translateY(-50%) scale(1.1); }
 }
 
 /* chat.styl */
