@@ -19,6 +19,10 @@ export const links: Route.LinksFunction = () => [
     rel: "stylesheet",
     href: "https://netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css",
   },
+  { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16.png" },
+  { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32.png" },
+  { rel: "icon", type: "image/png", sizes: "64x64", href: "/favicon-64.png" },
+  { rel: "apple-touch-icon", href: "/favicon-128.png" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -26,7 +30,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <html lang="de">
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="description" content="Wortopia – das Mehrspieler-Wortspiel" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Wortopia" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <title>Wortopia</title>
         <Links />
         <Meta />
