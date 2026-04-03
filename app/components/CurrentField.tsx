@@ -24,6 +24,21 @@ export default function CurrentField() {
   const secondsRemaining = currentRound?.seconds_remaining ?? 0;
 
   const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0);
+
+  // Rotate the display grid CCW; chain stays in original coords.
+  const displayField = useMemo(() => {
+    function rotateCCW(g: string[][]): string[][] {
+      const n = g.length;
+      return Array.from({ length: n }, (_, r) =>
+        Array.from({ length: n }, (_, c) => g[c][n - 1 - r])
+      );
+    }
+    let result = field;
+    const steps = rotation / 90;
+    for (let i = 0; i < steps; i++) result = rotateCCW(result);
+    return result;
+  }, [field, rotation]);
+
   const [chain, setChain] = useState<Cell[]>([]);
   const [wordEntered, setWordEntered] = useState('');
   const [wordEnteredClass, setWordEnteredClass] = useState('');
@@ -307,8 +322,21 @@ export default function CurrentField() {
     if (wordEntered) submitWord(wordEntered);
   };
 
-  const isPartOfChain = (x: number, y: number) =>
-    chain.some(el => el.x === x && el.y === y);
+  // Map a display cell (dx, dy) back to original coords for chain highlighting.
+  const displayToOriginal = useCallback((dx: number, dy: number): [number, number] => {
+    const n = size - 1;
+    switch (rotation) {
+      case 90:  return [n - dy, dx];
+      case 180: return [n - dx, n - dy];
+      case 270: return [dy, n - dx];
+      default:  return [dx, dy];
+    }
+  }, [rotation, size]);
+
+  const isPartOfChain = (dx: number, dy: number) => {
+    const [ox, oy] = displayToOriginal(dx, dy);
+    return chain.some(el => el.x === ox && el.y === oy);
+  };
 
   // Loading / disconnected state
   if (!connected || field.length === 0) {
@@ -329,16 +357,14 @@ export default function CurrentField() {
         <div className="field-container">
           <table className="field">
             <tbody>
-              {field.map((row, y) => (
+              {displayField.map((row, y) => (
                 <tr key={y}>
                   {row.map((cell, x) => (
                     <td
                       key={x}
                       className={`cell cell--${x}-${y}${isPartOfChain(x, y) ? ' cell--selected' : ''}`}
                     >
-                      <span style={rotation ? { display: 'inline-block', transform: `rotate(${rotation}deg)` } : undefined}>
-                        {cell.toUpperCase()}
-                      </span>
+                      {cell.toUpperCase()}
                     </td>
                   ))}
                 </tr>
@@ -383,7 +409,7 @@ export default function CurrentField() {
           <button
             type="button"
             className="btn btn-default btn-sm"
-            onClick={() => setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
+            onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
             title="Feld drehen"
             style={{ padding: '3px 7px', marginLeft: 4 }}
           >
