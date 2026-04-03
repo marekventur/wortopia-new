@@ -75,6 +75,12 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS user_results_finished
     ON user_results (finished);
 
+  CREATE INDEX IF NOT EXISTS user_results_by_user
+    ON user_results (user_id, size, max_points, points, words);
+
+  CREATE INDEX IF NOT EXISTS user_results_by_time
+    ON user_results (finished, user_id, max_points, points, words);
+
   CREATE TABLE IF NOT EXISTS muted_users (
     user_id INTEGER NOT NULL
   );

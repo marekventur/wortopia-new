@@ -42,13 +42,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const where = conditions.join(" AND ");
 
+  // SQLite's planner prefers the unique index for GROUP BY; force the covering
+  // index that matches the dominant filter to avoid full-scan aggregation.
+  const indexHint = days > 0
+    ? "INDEXED BY user_results_by_time"
+    : "INDEXED BY user_results_by_user";
+
   const leaderboard = db.prepare(`
     SELECT u.name, u.team,
            COUNT(*)                                              AS games,
            ROUND(100.0 * SUM(r.points) / SUM(r.max_points), 1) AS pct,
            ROUND(1.0  * SUM(r.words)  / COUNT(*), 1)           AS avg_words,
            MAX(r.points)                                        AS best_round
-    FROM user_results r
+    FROM user_results r ${indexHint}
     JOIN users u ON u.id = r.user_id
     WHERE ${where}
     GROUP BY r.user_id
