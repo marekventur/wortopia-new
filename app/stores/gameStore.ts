@@ -57,7 +57,7 @@ type GameStore = {
 export const useGameStore = create<GameStore>((set, get) => ({
   size: 4,
   setSize: (size) =>
-    set({ size, connected: false, currentRound: null, lastRound: null, myGuesses: [] }),
+    set({ size, connected: false, currentRound: null, lastRound: null, myGuesses: [], lastGuessResult: null }),
 
   myUsername: null,
   setMyUsername: (myUsername) => set({ myUsername }),
@@ -100,6 +100,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentRound: msg.current_round,
       lastRound: msg.last_round,
       myGuesses,
+      ...(isNewRound ? { lastGuessResult: null } : {}),
     });
   },
 
