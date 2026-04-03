@@ -22,12 +22,11 @@ npm ci
 npm run build
 
 if npx pm2 describe "$NAME" &>/dev/null; then
-  echo "Restarting existing PM2 app: $NAME"
-  npx pm2 restart "$NAME" --update-env
-else
-  echo "Starting PM2 app: $NAME"
-  npx pm2 start ecosystem.config.cjs
+  echo "Reloading PM2 app from ecosystem: $NAME"
+  npx pm2 delete "$NAME"
 fi
+echo "Starting PM2 app: $NAME"
+npx pm2 start ecosystem.config.cjs
 
 npx pm2 save
 echo "=== Done ==="
