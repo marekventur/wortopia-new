@@ -45,8 +45,10 @@ if (DEVELOPMENT) {
   // Mount WebSocket servers in dev (load via vite to get TS support)
   const gameSource = await viteDevServer.ssrLoadModule("./lib/gameWsServer.ts");
   const { getGameServer } = await viteDevServer.ssrLoadModule("./lib/gameServer.ts");
+  const { scheduleLeaderboardRefresh } = await viteDevServer.ssrLoadModule("./lib/leaderboardCache.ts");
   const gameServer = getGameServer();
   await gameServer.init();
+  scheduleLeaderboardRefresh();
   const gameWssMap = gameSource.createGameWsServer();
 
   mountWsRouter(httpServer, gameWssMap);
@@ -63,8 +65,10 @@ if (DEVELOPMENT) {
 
   const { getGameServer } = await import("./lib/gameServer.js");
   const { createGameWsServer } = await import("./lib/gameWsServer.js");
+  const { scheduleLeaderboardRefresh } = await import("./lib/leaderboardCache.js");
   const gameServer = getGameServer();
   await gameServer.init();
+  scheduleLeaderboardRefresh();
   const gameWssMap = createGameWsServer();
 
   mountWsRouter(httpServer, gameWssMap);

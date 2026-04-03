@@ -4,6 +4,7 @@ import { getOrCreateSession } from "../../lib/session.js";
 import { getDb } from "../../lib/db.js";
 
 type LeaderboardRow = {
+  rank: number;
   name: string;
   team: string | null;
   games: number;
@@ -28,57 +29,45 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const db = getDb();
 
-  // Build WHERE clauses
-  const conditions: string[] = ["max_points > 0"];
-  const params: (string | number)[] = [];
-
-  if (size === 4 || size === 5) {
-    conditions.push("size = ?");
-    params.push(size);
-  }
-  if (days > 0) {
-    conditions.push(`finished >= datetime('now', '-${days} days')`);
-  }
-
-  const where = conditions.join(" AND ");
-
-  // SQLite's planner prefers the unique index for GROUP BY; force the covering
-  // index that matches the dominant filter to avoid full-scan aggregation.
-  const indexHint = days > 0
-    ? "INDEXED BY user_results_by_time"
-    : "INDEXED BY user_results_by_user";
-
+  // Global leaderboard: read from pre-computed cache (refreshed nightly at 3am)
   const leaderboard = db.prepare(`
-    SELECT u.name, u.team,
-           COUNT(*)                                              AS games,
-           ROUND(100.0 * SUM(r.points) / SUM(r.max_points), 1) AS pct,
-           ROUND(1.0  * SUM(r.words)  / COUNT(*), 1)           AS avg_words,
-           MAX(r.points)                                        AS best_round
-    FROM user_results r ${indexHint}
-    JOIN users u ON u.id = r.user_id
-    WHERE ${where}
-    GROUP BY r.user_id
-    HAVING games >= 3
-    ORDER BY pct DESC
-    LIMIT 100
-  `).all(...params) as LeaderboardRow[];
+    SELECT rank, name, team, games, pct, avg_words, best_round
+    FROM leaderboard_cache
+    WHERE days = ? AND size = ?
+    ORDER BY rank ASC
+  `).all(days, size) as LeaderboardRow[];
 
+  const generatedAt = leaderboard.length > 0
+    ? (db.prepare("SELECT generated_at FROM leaderboard_cache WHERE days = ? AND size = ? LIMIT 1")
+        .get(days, size) as { generated_at: string } | undefined)?.generated_at ?? null
+    : null;
+
+  // Personal stats: live query, fast because it filters by user_id first
   let personal: PersonalRow | null = null;
   if (session.type === "user") {
-    const personalConditions = [...conditions, "user_id = ?"];
-    const personalParams = [...params, session.user.id];
+    const conditions: string[] = ["user_id = ?", "max_points > 0"];
+    const params: (string | number)[] = [session.user.id];
+
+    if (size === 4 || size === 5) {
+      conditions.push("size = ?");
+      params.push(size);
+    }
+    if (days > 0) {
+      conditions.push(`finished >= datetime('now', '-${days} days')`);
+    }
+
     personal = db.prepare(`
       SELECT COUNT(*)                                              AS games,
              ROUND(100.0 * SUM(points) / SUM(max_points), 1)     AS pct,
              ROUND(1.0  * SUM(words)  / COUNT(*), 1)             AS avg_words,
              MAX(points)                                          AS best_round
       FROM user_results
-      WHERE ${personalConditions.join(" AND ")}
-    `).get(...personalParams) as PersonalRow | null;
+      WHERE ${conditions.join(" AND ")}
+    `).get(...params) as PersonalRow | null;
   }
 
   const headers = cookieHeader ? { "Set-Cookie": cookieHeader } : undefined;
-  const payload = { session, days, size, leaderboard, personal };
+  const payload = { session, days, size, leaderboard, personal, generatedAt };
   return headers ? Response.json(payload, { headers }) : payload;
 }
 
@@ -97,7 +86,7 @@ const SIZE_OPTIONS = [
 ];
 
 export default function Rangliste({ loaderData }: Route.ComponentProps) {
-  const { session, days, size, leaderboard, personal } = loaderData;
+  const { session, days, size, leaderboard, personal, generatedAt } = loaderData;
   const loggedInName = session.type === "user" ? session.user.name : null;
 
   function filterLink(newDays: number, newSize: number) {
@@ -183,9 +172,9 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
               </tr>
             </thead>
             <tbody>
-              {leaderboard.map((row, i) => (
+              {leaderboard.map((row) => (
                 <tr key={row.name} style={row.name === loggedInName ? { fontWeight: "bold" } : undefined}>
-                  <td>{i + 1}</td>
+                  <td>{row.rank}</td>
                   <td>
                     {row.name}
                     {row.team && (
@@ -205,6 +194,9 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
         )}
         <p style={{ color: "#888", fontSize: "0.9em" }}>
           Top 100 · mindestens 3 Runden · geordnet nach Ergebnis
+          {generatedAt && (
+            <> · Stand: {new Date(generatedAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</>
+          )}
         </p>
       </div>
     </>

@@ -81,6 +81,20 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS user_results_by_time
     ON user_results (finished, user_id, max_points, points, words);
 
+  CREATE TABLE IF NOT EXISTS leaderboard_cache (
+    days         INTEGER NOT NULL,
+    size         INTEGER NOT NULL,
+    rank         INTEGER NOT NULL,
+    name         TEXT    NOT NULL,
+    team         TEXT,
+    games        INTEGER NOT NULL,
+    pct          REAL    NOT NULL,
+    avg_words    REAL    NOT NULL,
+    best_round   INTEGER NOT NULL,
+    generated_at TEXT    NOT NULL,
+    PRIMARY KEY (days, size, rank)
+  );
+
   CREATE TABLE IF NOT EXISTS muted_users (
     user_id INTEGER NOT NULL
   );
