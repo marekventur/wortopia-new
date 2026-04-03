@@ -12,13 +12,21 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-    pw_hash    TEXT    NOT NULL,
+    pw_hash    TEXT,
     team       TEXT    COLLATE NOCASE,
     created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (length(name) >= 4),
     CHECK (length(name) <= 15),
     CHECK (name NOT LIKE 'guest_%'),
     CHECK (team IS NULL OR (length(team) >= 5 AND length(team) <= 12))
+  );
+
+  CREATE TABLE IF NOT EXISTS email_codes (
+    email      TEXT PRIMARY KEY,
+    code_hash  TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    expires_at TEXT NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS user_emails (
@@ -125,9 +133,33 @@ export function getDb(): Database.Database {
     }
 
     // Migration: drop options column from users (no longer used)
-    const userCols = (db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[]).map(c => c.name);
+    const userColInfo = db.prepare(`PRAGMA table_info(users)`).all() as { name: string; notnull: number }[];
+    const userCols = userColInfo.map(c => c.name);
     if (userCols.includes('options')) {
       db.exec(`ALTER TABLE users DROP COLUMN options`);
+    }
+
+    // Migration: make pw_hash nullable (passwordless auth — existing hashes kept for recovery)
+    const pwHashCol = userColInfo.find(c => c.name === 'pw_hash');
+    if (pwHashCol?.notnull) {
+      db.pragma("foreign_keys = OFF");
+      db.exec(`
+        CREATE TABLE users_new (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+          pw_hash    TEXT,
+          team       TEXT    COLLATE NOCASE,
+          created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+          CHECK (length(name) >= 4),
+          CHECK (length(name) <= 15),
+          CHECK (name NOT LIKE 'guest_%'),
+          CHECK (team IS NULL OR (length(team) >= 5 AND length(team) <= 12))
+        );
+        INSERT INTO users_new SELECT * FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+      `);
+      db.pragma("foreign_keys = ON");
     }
 
     // Migration: add round_id + unique constraint to user_results

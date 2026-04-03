@@ -7,9 +7,9 @@ export default [
   route("login", "routes/login.tsx"),
   route("account", "routes/account.tsx"),
   route(":size", "routes/home.tsx"),
-  route("api/signup", "routes/api.signup.ts"),
-  route("api/login", "routes/api.login.ts"),
+  route("api/auth/request", "routes/api.auth.request.ts"),
+  route("api/auth/verify", "routes/api.auth.verify.ts"),
+  route("api/auth/register", "routes/api.auth.register.ts"),
   route("api/logout", "routes/api.logout.ts"),
-  route("api/recover", "routes/api.recover.ts"),
   route("api/account", "routes/api.account.ts"),
 ] satisfies RouteConfig;

@@ -69,15 +69,7 @@ function AccountForm({ user }: { user: SessionUser | null }) {
       </div>
       <div className="form-group">
         <label htmlFor="accountEmail">Email-Adresse</label>
-        <input type="email" className="form-control" name="email" id="accountEmail" placeholder="name@adresse.de" defaultValue={user?.email ?? ""} />
-      </div>
-      <div className="form-group">
-        <label htmlFor="accountPassword1">Neues Passwort</label>
-        <input type="password" className="form-control" name="password1" id="accountPassword1" placeholder="Passwort" />
-      </div>
-      <div className="form-group">
-        <label htmlFor="accountPassword2">Passwort (wiederholen)</label>
-        <input type="password" className="form-control" name="password2" id="accountPassword2" placeholder="Passwort" />
+        <input type="email" className="form-control" id="accountEmail" defaultValue={user?.email ?? ""} readOnly disabled />
       </div>
       <button type="submit" className="btn btn-primary" disabled={loading || success}>
         {loading ? "..." : "Speichern"}
