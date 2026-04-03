@@ -228,6 +228,9 @@ export class GameServer extends EventEmitter {
       // Persist per-user results for ranking
       persistRoundResults(roundId, size, guesses, s.current.validWords);
 
+      // Prune old round_guesses — only needed for real-time display, keep last 15 min
+      getDb().prepare(`DELETE FROM round_guesses WHERE created_at < datetime('now', '-15 minutes')`).run();
+
       // Emit update (lastRound now populated, current_round shows cooldown)
       const updatePayload = this.buildUpdatePayload(size, undefined);
       this.emit(`update:${size}`, updatePayload);

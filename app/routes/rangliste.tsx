@@ -1,75 +1,205 @@
 import type { Route } from "./+types/rangliste";
 import Nav from "../components/Nav";
 import { getOrCreateSession } from "../../lib/session.js";
+import { getDb } from "../../lib/db.js";
+
+type LeaderboardRow = {
+  name: string;
+  team: string | null;
+  games: number;
+  pct: number;
+  avg_words: number;
+  best_round: number;
+};
+
+type PersonalRow = {
+  games: number;
+  pct: number | null;
+  avg_words: number | null;
+  best_round: number | null;
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { session, cookieHeader } = await getOrCreateSession(request);
-  if (cookieHeader) {
-    return Response.json({ session }, { headers: { "Set-Cookie": cookieHeader } });
+
+  const url = new URL(request.url);
+  const days = parseInt(url.searchParams.get("days") ?? "30", 10);
+  const size = parseInt(url.searchParams.get("size") ?? "0", 10); // 0 = both
+
+  const db = getDb();
+
+  // Build WHERE clauses
+  const conditions: string[] = ["max_points > 0"];
+  const params: (string | number)[] = [];
+
+  if (size === 4 || size === 5) {
+    conditions.push("size = ?");
+    params.push(size);
   }
-  return { session };
+  if (days > 0) {
+    conditions.push(`finished >= datetime('now', '-${days} days')`);
+  }
+
+  const where = conditions.join(" AND ");
+
+  const leaderboard = db.prepare(`
+    SELECT u.name, u.team,
+           COUNT(*)                                              AS games,
+           ROUND(100.0 * SUM(r.points) / SUM(r.max_points), 1) AS pct,
+           ROUND(1.0  * SUM(r.words)  / COUNT(*), 1)           AS avg_words,
+           MAX(r.points)                                        AS best_round
+    FROM user_results r
+    JOIN users u ON u.id = r.user_id
+    WHERE ${where}
+    GROUP BY r.user_id
+    HAVING games >= 3
+    ORDER BY pct DESC
+    LIMIT 100
+  `).all(...params) as LeaderboardRow[];
+
+  let personal: PersonalRow | null = null;
+  if (session.type === "user") {
+    const personalConditions = [...conditions, "user_id = ?"];
+    const personalParams = [...params, session.user.id];
+    personal = db.prepare(`
+      SELECT COUNT(*)                                              AS games,
+             ROUND(100.0 * SUM(points) / SUM(max_points), 1)     AS pct,
+             ROUND(1.0  * SUM(words)  / COUNT(*), 1)             AS avg_words,
+             MAX(points)                                          AS best_round
+      FROM user_results
+      WHERE ${personalConditions.join(" AND ")}
+    `).get(...personalParams) as PersonalRow | null;
+  }
+
+  const headers = cookieHeader ? { "Set-Cookie": cookieHeader } : undefined;
+  const payload = { session, days, size, leaderboard, personal };
+  return headers ? Response.json(payload, { headers }) : payload;
 }
 
-const highscores = [
-  { id: 1, name: 'Axiom', count: 245, avg: 0.82, avgWords: 8.5 },
-  { id: 2, name: 'Grobi', count: 189, avg: 0.79, avgWords: 7.2 },
-  { id: 3, name: 'Lüwerb75', count: 312, avg: 0.77, avgWords: 6.9 },
-  { id: 4, name: 'BarbII', count: 156, avg: 0.75, avgWords: 6.5 },
-  { id: 5, name: 'HerrSchwarz', count: 98, avg: 0.73, avgWords: 6.1 },
-  { id: 6, name: 'Wortklauberin', count: 87, avg: 0.71, avgWords: 5.8 },
-  { id: 7, name: 'Hurz', count: 203, avg: 0.69, avgWords: 5.5 },
-  { id: 8, name: 'chipai', count: 44, avg: 0.65, avgWords: 4.9 },
+const DAY_OPTIONS = [
+  { label: "7 Tage", value: 7 },
+  { label: "30 Tage", value: 30 },
+  { label: "90 Tage", value: 90 },
+  { label: "1 Jahr", value: 365 },
+  { label: "Gesamt", value: 0 },
+];
+
+const SIZE_OPTIONS = [
+  { label: "Beide", value: 0 },
+  { label: "4×4", value: 4 },
+  { label: "5×5", value: 5 },
 ];
 
 export default function Rangliste({ loaderData }: Route.ComponentProps) {
-  const { session } = loaderData;
+  const { session, days, size, leaderboard, personal } = loaderData;
+  const loggedInName = session.type === "user" ? session.user.name : null;
+
+  function filterLink(newDays: number, newSize: number) {
+    return `/rangliste?days=${newDays}&size=${newSize}`;
+  }
+
   return (
     <>
       <Nav session={session} />
-      <div className="container" style={{ marginTop: 70 }}>
-        <div className="row">
-          <div className="col-md-8 col-md-offset-2">
-            <div className="panel panel-default">
-              <div className="panel-heading"><h4>Rangliste</h4></div>
-              <div className="panel-body">
-                <div className="input-group interval-select">
-                  <select className="form-control" defaultValue="30">
-                    <option value="1">letzten 24 Stunden</option>
-                    <option value="7">letzten 7 Tage</option>
-                    <option value="30">letzten 30 Tage</option>
-                    <option value="60">letzten 60 Tage</option>
-                    <option value="90">letzten 90 Tage</option>
-                    <option value="180">letzten 180 Tage</option>
-                    <option value="365">letzten 365 Tage</option>
-                  </select>
-                </div>
-                <p>Rangliste der 100 besten Spieler/innen in dem gewählten Zeitraum</p>
-                <table className="table table-condensed">
+      <div className="container" style={{ marginTop: 30, maxWidth: 800 }}>
+        <h2>Rangliste</h2>
+
+        {/* Filter bar */}
+        <div style={{ marginBottom: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div className="btn-group">
+            {DAY_OPTIONS.map(opt => (
+              <a
+                key={opt.value}
+                href={filterLink(opt.value, size)}
+                className={`btn btn-default btn-sm${days === opt.value ? " active" : ""}`}
+              >
+                {opt.label}
+              </a>
+            ))}
+          </div>
+          <div className="btn-group">
+            {SIZE_OPTIONS.map(opt => (
+              <a
+                key={opt.value}
+                href={filterLink(days, opt.value)}
+                className={`btn btn-default btn-sm${size === opt.value ? " active" : ""}`}
+              >
+                {opt.label}
+              </a>
+            ))}
+          </div>
+        </div>
+
+        {/* Personal stats */}
+        {personal && (
+          <div className="panel panel-default" style={{ marginBottom: 20 }}>
+            <div className="panel-heading"><strong>Deine Statistiken</strong></div>
+            <div className="panel-body">
+              {personal.games === 0 ? (
+                <p style={{ color: "#888", margin: 0 }}>Keine Runden im gewählten Zeitraum.</p>
+              ) : (
+                <table className="table table-condensed" style={{ marginBottom: 0 }}>
                   <thead>
                     <tr>
-                      <th>#</th>
-                      <th>Name</th>
-                      <th>Spiele</th>
+                      <th>Runden</th>
                       <th>Ergebnis</th>
-                      <th>Wörtern pro Runde</th>
+                      <th>Wörter/Runde</th>
+                      <th>Beste Runde</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {highscores.map((result, i) => (
-                      <tr key={result.id}>
-                        <td>{i + 1}</td>
-                        <td>{result.name}</td>
-                        <td>{result.count}</td>
-                        <td>{Math.round(result.avg * 100)}%</td>
-                        <td>{result.avgWords.toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    <tr>
+                      <td>{personal.games}</td>
+                      <td>{personal.pct !== null ? `${personal.pct}%` : "—"}</td>
+                      <td>{personal.avg_words !== null ? personal.avg_words.toFixed(1) : "—"}</td>
+                      <td>{personal.best_round ?? "—"}</td>
+                    </tr>
                   </tbody>
                 </table>
-              </div>
+              )}
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Global leaderboard */}
+        {leaderboard.length === 0 ? (
+          <p style={{ color: "#888" }}>Keine Daten für diesen Zeitraum.</p>
+        ) : (
+          <table className="table table-condensed table-hover">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Runden</th>
+                <th>Ergebnis</th>
+                <th>Wörter/Runde</th>
+                <th>Beste Runde</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboard.map((row, i) => (
+                <tr key={row.name} style={row.name === loggedInName ? { fontWeight: "bold" } : undefined}>
+                  <td>{i + 1}</td>
+                  <td>
+                    {row.name}
+                    {row.team && (
+                      <span className="label label-default" style={{ marginLeft: 6, fontWeight: "normal" }}>
+                        {row.team}
+                      </span>
+                    )}
+                  </td>
+                  <td>{row.games}</td>
+                  <td>{row.pct}%</td>
+                  <td>{row.avg_words.toFixed(1)}</td>
+                  <td>{row.best_round}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p style={{ color: "#888", fontSize: "0.9em" }}>
+          Top 100 · mindestens 3 Runden · geordnet nach Ergebnis
+        </p>
       </div>
     </>
   );

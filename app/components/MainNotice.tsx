@@ -1,12 +1,11 @@
 export default function MainNotice() {
   return (
-    <div className="panel panel-default hidden-xs hidden-sm">
+    <div className="panel panel-default hidden-xs hidden-sm" style={{ backgroundColor: "#fffbe6", borderColor: "#ffe58f" }}>
       <div className="panel-body">
-        Hilf mit, Wortopia besser zu machen! Teile deine Meinung in unserer kurzen{' '}
-        <a href="https://docs.google.com/forms/d/e/1FAIpQLSfrFher4Bhkt1CqKd9s6FlA1JAowEmE9JUbmeRPppbk0C3yUw/viewform" target="_blank" rel="noreferrer">
+        Bitte hilf mir, die neue Version von Wortopia zu testen, bevor ich die Spieldaten und Accounts transferiere und die alte Version lösche.{' '}
+        <a href="https://docs.google.com/forms/d/e/1FAIpQLSf7RZaQr4gpWuX2wJrbM3tFwoNxUKlL8XAX5UHfsvadPDCrdA/viewform?usp=publish-editor" target="_blank" rel="noreferrer">
           Umfrage
-        </a>{' '}
-        zur Neugestaltung
+        </a>
       </div>
     </div>
   );

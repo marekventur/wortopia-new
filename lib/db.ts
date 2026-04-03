@@ -162,11 +162,20 @@ export function getDb(): Database.Database {
       db.pragma("foreign_keys = ON");
     }
 
+    // Index for rangliste time-filtered queries
+    db.exec(`CREATE INDEX IF NOT EXISTS user_results_finished ON user_results (finished)`);
+
     // Migration: add round_id + unique constraint to user_results
     const resultCols = (db.prepare(`PRAGMA table_info(user_results)`).all() as { name: string }[]).map(c => c.name);
     if (!resultCols.includes('round_id')) {
       db.exec(`ALTER TABLE user_results ADD COLUMN round_id INTEGER NOT NULL DEFAULT 0`);
       db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS user_results_unique ON user_results (user_id, round_id, size)`);
+    }
+    if (!resultCols.includes('max_words')) {
+      db.exec(`ALTER TABLE user_results ADD COLUMN max_words INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!resultCols.includes('max_points')) {
+      db.exec(`ALTER TABLE user_results ADD COLUMN max_points INTEGER NOT NULL DEFAULT 0`);
     }
   }
   return db;

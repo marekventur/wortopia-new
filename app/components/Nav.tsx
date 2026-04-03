@@ -39,7 +39,7 @@ export default function Nav({ session, size }: Props) {
             <span className="icon-bar"></span>
             <span className="icon-bar"></span>
           </button>
-          <a className="navbar-brand font-bold" href="/">Wortopia</a>
+          <a className="navbar-brand font-bold" href="/">Wortopia <small style={{ fontSize: "0.6em", opacity: 0.7 }}>v2</small></a>
         </div>
         <div className="navbar-collapse collapse">
           <ul className="nav navbar-nav navbar-right">

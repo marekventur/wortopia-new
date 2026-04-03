@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="apple-mobile-web-app-title" content="Wortopia" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <title>Wortopia</title>
+        <title>Wortopia v2</title>
         <Links />
         <Meta />
       </head>
