@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useChatStore } from "../stores/chatStore";
 import { useGameStore } from "../stores/gameStore";
+import { fieldContains, fieldToGrid } from "../../lib/fieldContains.js";
 import type { Session } from "../../lib/session.js";
 
 function formatTime(seconds: number): string {
@@ -18,10 +19,13 @@ export default function Chat({ session }: Props) {
   const send = useChatStore((s) => s.send);
   const connected = useChatStore((s) => s.connected);
   const currentRound = useGameStore((s) => s.currentRound);
+  const size = useGameStore((s) => s.size);
+  const guess = useGameStore((s) => s.guess);
   const isCooldown = currentRound?.state === 'cooldown';
   const secondsRemaining = currentRound?.seconds_remaining ?? 0;
   const [input, setInput] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const displayName =
     session.type === "user" ? session.user.name : `Gast ${session.guestId}`;
@@ -36,6 +40,18 @@ export default function Chat({ session }: Props) {
     if (e.key !== "Enter") return;
     const text = input.trim();
     if (!text || !connected) return;
+
+    // Single word that can be formed on the current field → send as a game guess
+    if (!text.includes(" ") && currentRound?.field) {
+      const grid = fieldToGrid(currentRound.field, size);
+      if (fieldContains(grid, text)) {
+        guess(text);
+        setInput("");
+        inputRef.current?.focus();
+        return;
+      }
+    }
+
     send(text);
     setInput("");
   }
@@ -57,6 +73,7 @@ export default function Chat({ session }: Props) {
           <div className="input-group input-group-sm">
             <span className="input-group-addon">{displayName}</span>
             <input
+              ref={inputRef}
               type="text"
               className="form-control chat-input"
               id="chat-input"

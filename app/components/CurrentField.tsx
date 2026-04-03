@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { RotateCcw } from 'lucide-react';
 import { fieldContains, fieldToGrid, type Cell } from '../../lib/fieldContains.js';
 import { useGameStore } from '../stores/gameStore';
 
@@ -22,6 +23,7 @@ export default function CurrentField() {
   const isCooldown = currentRound?.state === 'cooldown';
   const secondsRemaining = currentRound?.seconds_remaining ?? 0;
 
+  const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0);
   const [chain, setChain] = useState<Cell[]>([]);
   const [wordEntered, setWordEntered] = useState('');
   const [wordEnteredClass, setWordEnteredClass] = useState('');
@@ -334,7 +336,9 @@ export default function CurrentField() {
                       key={x}
                       className={`cell cell--${x}-${y}${isPartOfChain(x, y) ? ' cell--selected' : ''}`}
                     >
-                      {cell.toUpperCase()}
+                      <span style={rotation ? { display: 'inline-block', transform: `rotate(${rotation}deg)` } : undefined}>
+                        {cell.toUpperCase()}
+                      </span>
                     </td>
                   ))}
                 </tr>
@@ -376,6 +380,15 @@ export default function CurrentField() {
               formatTime(secondsRemaining)
             )}
           </label>
+          <button
+            type="button"
+            className="btn btn-default btn-sm"
+            onClick={() => setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
+            title="Feld drehen"
+            style={{ padding: '3px 7px', marginLeft: 4 }}
+          >
+            <RotateCcw size={13} />
+          </button>
         </form>
       </div>
     </div>
