@@ -64,6 +64,30 @@ export default function CurrentField() {
     }
   }, [lastGuessResult?.ts]);
 
+  // --- Coordinate mapping (display ↔ original) ---
+
+  // Map a display cell (dx, dy) back to original coords.
+  const displayToOriginal = useCallback((dx: number, dy: number): [number, number] => {
+    const n = size - 1;
+    switch (rotation) {
+      case 90:  return [n - dy, dx];
+      case 180: return [n - dx, n - dy];
+      case 270: return [dy, n - dx];
+      default:  return [dx, dy];
+    }
+  }, [rotation, size]);
+
+  // Map original coords to display cell (inverse of displayToOriginal).
+  const originalToDisplay = useCallback((ox: number, oy: number): [number, number] => {
+    const n = size - 1;
+    switch (rotation) {
+      case 90:  return [oy, n - ox];
+      case 180: return [n - ox, n - oy];
+      case 270: return [n - oy, ox];
+      default:  return [ox, oy];
+    }
+  }, [rotation, size]);
+
   // --- Canvas drawing ---
 
   const drawChain = useCallback(
@@ -81,8 +105,9 @@ export default function CurrentField() {
       const radius = cellDimension * 0.4;
       let first = true;
       for (const el of c) {
-        const x = Math.round((el.x + 0.5) * cellDimension);
-        const y = Math.round((el.y + 0.5) * cellDimension);
+        const [dx, dy] = originalToDisplay(el.x, el.y);
+        const x = Math.round((dx + 0.5) * cellDimension);
+        const y = Math.round((dy + 0.5) * cellDimension);
         if (first) { ctx.moveTo(x, y); first = false; }
         else { ctx.lineTo(x, y); }
       }
@@ -90,8 +115,9 @@ export default function CurrentField() {
       ctx.stroke();
 
       for (const el of c) {
-        const x = Math.round((el.x + 0.5) * cellDimension);
-        const y = Math.round((el.y + 0.5) * cellDimension);
+        const [dx, dy] = originalToDisplay(el.x, el.y);
+        const x = Math.round((dx + 0.5) * cellDimension);
+        const y = Math.round((dy + 0.5) * cellDimension);
 
         ctx.save();
         ctx.globalCompositeOperation = 'destination-out';
@@ -105,7 +131,7 @@ export default function CurrentField() {
         ctx.stroke();
       }
     },
-    [cellDimension],
+    [cellDimension, originalToDisplay],
   );
 
   // --- Chain management ---
@@ -173,8 +199,9 @@ export default function CurrentField() {
 
   const swipeStart = useCallback(
     (posX: number, posY: number, guessingMethod: string) => {
-      const x = Math.floor(posX / cellDimension);
-      const y = Math.floor(posY / cellDimension);
+      const dx = Math.floor(posX / cellDimension);
+      const dy = Math.floor(posY / cellDimension);
+      const [x, y] = displayToOriginal(dx, dy);
       const result = addCellToChain(x, y);
       if (result === 'a') {
         startSwipingFieldRef.current = { x, y };
@@ -183,17 +210,18 @@ export default function CurrentField() {
         submitChain(guessingMethod + 'Single');
       }
     },
-    [cellDimension, addCellToChain, drawChain, submitChain],
+    [cellDimension, displayToOriginal, addCellToChain, drawChain, submitChain],
   );
 
   const swipeMove = useCallback(
     (posX: number, posY: number, tolerance = 0.4) => {
-      const x = Math.floor(posX / cellDimension);
-      const y = Math.floor(posY / cellDimension);
+      const dx = Math.floor(posX / cellDimension);
+      const dy = Math.floor(posY / cellDimension);
+      const [x, y] = displayToOriginal(dx, dy);
       const start = startSwipingFieldRef.current;
       if (start && (x !== start.x || y !== start.y)) {
-        const centerX = (x + 0.5) * cellDimension;
-        const centerY = (y + 0.5) * cellDimension;
+        const centerX = (dx + 0.5) * cellDimension;
+        const centerY = (dy + 0.5) * cellDimension;
         const dist = Math.sqrt((posX - centerX) ** 2 + (posY - centerY) ** 2);
         if (dist < tolerance * cellDimension) {
           const result = addCellToChain(x, y);
@@ -205,20 +233,21 @@ export default function CurrentField() {
         drawChain(chainRef.current, { x: posX, y: posY });
       }
     },
-    [cellDimension, addCellToChain, drawChain],
+    [cellDimension, displayToOriginal, addCellToChain, drawChain],
   );
 
   const swipeEnd = useCallback(
     (posX: number, posY: number, guessingMethod: string) => {
-      const x = Math.floor(posX / cellDimension);
-      const y = Math.floor(posY / cellDimension);
+      const dx = Math.floor(posX / cellDimension);
+      const dy = Math.floor(posY / cellDimension);
+      const [x, y] = displayToOriginal(dx, dy);
       const start = startSwipingFieldRef.current;
       if (start && (x !== start.x || y !== start.y)) {
         submitChain(guessingMethod + 'Swipe');
       }
       startSwipingFieldRef.current = null;
     },
-    [cellDimension, submitChain],
+    [cellDimension, displayToOriginal, submitChain],
   );
 
   // --- Touch events ---
@@ -319,19 +348,13 @@ export default function CurrentField() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (wordEntered.toLowerCase() === 'r') {
+      setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270);
+      clearChain();
+      return;
+    }
     if (wordEntered) submitWord(wordEntered);
   };
-
-  // Map a display cell (dx, dy) back to original coords for chain highlighting.
-  const displayToOriginal = useCallback((dx: number, dy: number): [number, number] => {
-    const n = size - 1;
-    switch (rotation) {
-      case 90:  return [n - dy, dx];
-      case 180: return [n - dx, n - dy];
-      case 270: return [dy, n - dx];
-      default:  return [dx, dy];
-    }
-  }, [rotation, size]);
 
   const isPartOfChain = (dx: number, dy: number) => {
     const [ox, oy] = displayToOriginal(dx, dy);
@@ -388,30 +411,33 @@ export default function CurrentField() {
         <form
           className={`input-area hidden-xs hidden-sm${wordEnteredClass ? ` ${wordEnteredClass}` : ''}`}
           onSubmit={handleSubmit}
+          style={{ display: 'flex', alignItems: 'center' }}
         >
-          <input
-            ref={inputRef}
-            type="text"
-            className="input form-control"
-            id="word-input"
-            value={wordEntered}
-            onChange={e => handleTypeWord(e.target.value)}
-            disabled={isCooldown}
-            placeholder={isCooldown ? 'Pause…' : ''}
-          />
-          <label htmlFor="word-input">
-            {isCooldown ? (
-              <span className="text-muted">{formatTime(secondsRemaining)}</span>
-            ) : (
-              formatTime(secondsRemaining)
-            )}
-          </label>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <input
+              ref={inputRef}
+              type="text"
+              className="input form-control"
+              id="word-input"
+              value={wordEntered}
+              onChange={e => handleTypeWord(e.target.value)}
+              disabled={isCooldown}
+              placeholder={isCooldown ? 'Pause…' : ''}
+            />
+            <label htmlFor="word-input">
+              {isCooldown ? (
+                <span className="text-muted">{formatTime(secondsRemaining)}</span>
+              ) : (
+                formatTime(secondsRemaining)
+              )}
+            </label>
+          </div>
           <button
             type="button"
             className="btn btn-default btn-sm"
             onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
-            title="Feld drehen"
-            style={{ padding: '3px 7px', marginLeft: 4 }}
+            title="Feld drehen (oder 'r' eingeben)"
+            style={{ padding: '3px 7px', marginLeft: 4, flexShrink: 0, border: 'none', background: 'transparent' }}
           >
             <RotateCcw size={13} />
           </button>
