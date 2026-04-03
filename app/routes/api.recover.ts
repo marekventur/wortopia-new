@@ -40,7 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const sessionToken = await createSession(user.id);
   const cookieHeader = await sessionCookie.serialize(sessionToken);
 
-  return redirect("/?modal=account", { headers: { "Set-Cookie": cookieHeader } });
+  return redirect("/account", { headers: { "Set-Cookie": cookieHeader } });
 }
 
 /** POST /api/recover — send recovery email */

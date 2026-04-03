@@ -1,9 +1,7 @@
-import { useEffect } from "react";
 import { useGameStore } from "../stores/gameStore";
 import type { Route } from "./+types/home";
 import Nav from "../components/Nav";
 import MainAreaPositioner from "../components/MainAreaPositioner";
-import { useModalStore } from "../stores/modalStore";
 import CurrentField from "../components/CurrentField";
 import Chat from "../components/Chat";
 import PlayerList from "../components/PlayerList";
@@ -11,10 +9,6 @@ import MainNotice from "../components/MainNotice";
 import GameMessages from "../components/GameMessages";
 import Guesses from "../components/Guesses";
 import LastField from "../components/LastField";
-import SignUpModal from "../components/modals/SignUpModal";
-import LoginModal from "../components/modals/LoginModal";
-import AccountModal from "../components/modals/AccountModal";
-import RecoverModal from "../components/modals/RecoverModal";
 import { redirect } from "react-router";
 import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
 import GameProvider from "../components/GameProvider";
@@ -25,12 +19,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (sizeNum !== 4 && sizeNum !== 5) return redirect("/4");
   const size = sizeNum as GameSize;
 
-  const url = new URL(request.url);
-  const openModal = url.searchParams.get("modal");
   const session = await getSession(request);
 
   if (session) {
-    return { session, openModal, size };
+    return { session, size };
   }
 
   // First visit — assign a guest ID and set cookie
@@ -39,19 +31,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const cookieHeader = await sessionCookie.serialize(guestToken);
 
   return Response.json(
-    { session: { type: "guest", guestId } as Session, openModal, size },
+    { session: { type: "guest", guestId } as Session, size },
     { headers: { "Set-Cookie": cookieHeader } }
   );
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { session, openModal: initialModal, size } = loaderData;
-  const { openModal } = useModalStore();
+  const { session, size } = loaderData;
   const isCooldown = useGameStore((s) => s.currentRound?.state === 'cooldown');
-
-  useEffect(() => {
-    if (initialModal) openModal(initialModal);
-  }, []);
 
   return (
     <GameProvider session={session} size={size}>
@@ -81,10 +68,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      <SignUpModal />
-      <LoginModal />
-      <AccountModal user={session.type === "user" ? session.user : null} />
-      <RecoverModal />
     </div>
     </GameProvider>
   );
