@@ -77,13 +77,17 @@ if (DEVELOPMENT) {
  * listeners and send 400 for non-matching paths, clobbering each other.
  * The fix: use noServer:true everywhere and route manually here.
  */
+/**
+ * @param {import("http").Server} server
+ * @param {Map<string, import("ws").WebSocketServer>} gameWssMap
+ */
 function mountWsRouter(server, gameWssMap) {
-  server.on("upgrade", (req, socket, head) => {
-    const pathname = new URL(req.url, "http://localhost").pathname;
+  server.on("upgrade", (/** @type {import("http").IncomingMessage} */ req, /** @type {import("stream").Duplex} */ socket, /** @type {Buffer} */ head) => {
+    const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
 
     const gameWss = gameWssMap.get(pathname);
     if (gameWss) {
-      gameWss.handleUpgrade(req, socket, head, (ws) => {
+      gameWss.handleUpgrade(req, socket, head, (/** @type {import("ws").WebSocket} */ ws) => {
         gameWss.emit("connection", ws, req);
       });
       return;
