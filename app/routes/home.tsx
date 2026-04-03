@@ -11,13 +11,10 @@ import MainNotice from "../components/MainNotice";
 import GameMessages from "../components/GameMessages";
 import Guesses from "../components/Guesses";
 import LastField from "../components/LastField";
-import OptionsModal from "../components/modals/OptionsModal";
 import SignUpModal from "../components/modals/SignUpModal";
 import LoginModal from "../components/modals/LoginModal";
 import AccountModal from "../components/modals/AccountModal";
 import RecoverModal from "../components/modals/RecoverModal";
-import RulesModal from "../components/modals/RulesModal";
-import HighscoreModal from "../components/modals/HighscoreModal";
 import { redirect } from "react-router";
 import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
 import GameProvider from "../components/GameProvider";
@@ -84,13 +81,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      <OptionsModal />
       <SignUpModal />
       <LoginModal />
       <AccountModal user={session.type === "user" ? session.user : null} />
       <RecoverModal />
-      <RulesModal />
-      <HighscoreModal />
     </div>
     </GameProvider>
   );

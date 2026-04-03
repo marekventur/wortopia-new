@@ -17,7 +17,6 @@ export type SessionUser = {
   id: number;
   name: string;
   team: string | null;
-  options: string;
   email: string | null;
 };
 
@@ -78,7 +77,7 @@ export async function getSession(request: Request): Promise<Session | null> {
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT u.id, u.name, u.team, u.options, e.email
+      `SELECT u.id, u.name, u.team, e.email
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN user_emails e ON e.user_id = u.id
@@ -89,6 +88,22 @@ export async function getSession(request: Request): Promise<Session | null> {
     .get(token) as SessionUser | undefined;
 
   return row ? { type: "user", user: row } : null;
+}
+
+/**
+ * Returns the session, creating a guest session (with Set-Cookie) if none exists.
+ * Use in loaders that don't need a game size.
+ */
+export async function getOrCreateSession(
+  request: Request,
+): Promise<{ session: Session; cookieHeader?: string }> {
+  const session = await getSession(request);
+  if (session) return { session };
+
+  const guestId = Math.floor(Math.random() * 100_001);
+  const guestToken = createGuestToken(guestId);
+  const cookieHeader = await sessionCookie.serialize(guestToken);
+  return { session: { type: "guest", guestId }, cookieHeader };
 }
 
 export async function getSessionUser(request: Request): Promise<SessionUser | null> {

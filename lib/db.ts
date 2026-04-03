@@ -14,7 +14,6 @@ const SCHEMA = `
     name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
     pw_hash    TEXT    NOT NULL,
     team       TEXT    COLLATE NOCASE,
-    options    TEXT    NOT NULL DEFAULT '{}',
     created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (length(name) >= 4),
     CHECK (length(name) <= 15),
@@ -123,6 +122,12 @@ export function getDb(): Database.Database {
     const chatCols = (db.prepare(`PRAGMA table_info(chat_messages)`).all() as { name: string }[]).map(c => c.name);
     if (!chatCols.includes('size')) {
       db.exec(`ALTER TABLE chat_messages ADD COLUMN size INTEGER NOT NULL DEFAULT 4`);
+    }
+
+    // Migration: drop options column from users (no longer used)
+    const userCols = (db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[]).map(c => c.name);
+    if (userCols.includes('options')) {
+      db.exec(`ALTER TABLE users DROP COLUMN options`);
     }
 
     // Migration: add round_id + unique constraint to user_results
