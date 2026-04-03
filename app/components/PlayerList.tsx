@@ -27,6 +27,11 @@ export default function PlayerList() {
               {player.points}
             </span>
             {player.username === myUsername ? <strong>{player.username}</strong> : player.username}
+            {player.team && (
+              <span className="label label-default" style={{ marginLeft: 6, fontSize: "0.8em", fontWeight: "normal" }}>
+                {player.team}
+              </span>
+            )}
           </li>
         ))}
       </ul>

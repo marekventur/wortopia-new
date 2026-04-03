@@ -9,6 +9,7 @@ export type RoundPhase = "ongoing" | "cooldown";
 export type PlayerResult = {
   userId: number;
   username: string;
+  team: string | null;
   words: number;
   points: number;
 };

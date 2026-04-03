@@ -342,9 +342,10 @@ export class GameServer extends EventEmitter {
     const db = getDb();
     return db
       .prepare(
-        `SELECT word, result, points, username, user_id
-         FROM round_guesses
-         WHERE round_id = ? AND size = ?`,
+        `SELECT rg.word, rg.result, rg.points, rg.username, rg.user_id, u.team
+         FROM round_guesses rg
+         LEFT JOIN users u ON u.id = rg.user_id
+         WHERE rg.round_id = ? AND rg.size = ?`,
       )
       .all(roundId, size) as GuessRow[];
   }

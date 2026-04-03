@@ -39,11 +39,13 @@ export type GuessRow = {
   points: number;
   username: string;
   user_id: number;
+  team: string | null;
 };
 
 export type PlayerResult = {
   userId: number;
   username: string;
+  team: string | null;
   words: number;
   points: number;
 };
@@ -71,6 +73,7 @@ export function buildResults(
       playerMap.set(g.user_id, {
         userId: g.user_id,
         username: g.username,
+        team: g.team,
         words: 0,
         points: 0,
       });
@@ -147,11 +150,11 @@ export function buildLastRoundResults(
   validWords: Set<string>,
 ): LastRoundResults {
   // ── Leaderboard (same as buildResults) ────────────────────────────────────
-  const playerMap = new Map<number, { userId: number; username: string; words: number; points: number }>();
+  const playerMap = new Map<number, PlayerResult>();
   for (const g of guesses) {
     if (g.result !== "correct") continue;
     if (!playerMap.has(g.user_id)) {
-      playerMap.set(g.user_id, { userId: g.user_id, username: g.username, words: 0, points: 0 });
+      playerMap.set(g.user_id, { userId: g.user_id, username: g.username, team: g.team, words: 0, points: 0 });
     }
     const p = playerMap.get(g.user_id)!;
     p.words++;
