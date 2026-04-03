@@ -147,17 +147,6 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
               </a>
             ))}
           </div>
-          <div className="btn-group">
-            {Object.entries(SORT_LABELS).map(([key, label]) => (
-              <a
-                key={key}
-                href={filterLink(days, size, key)}
-                className={`btn btn-default btn-sm${sortBy === key ? " active" : ""}`}
-              >
-                {label}
-              </a>
-            ))}
-          </div>
         </div>
 
         {/* Personal stats */}
@@ -200,10 +189,13 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
               <tr>
                 <th>#</th>
                 <th>Name</th>
-                <th>Runden</th>
-                <th>Ergebnis</th>
-                <th>Wörter/Runde</th>
-                <th>Beste Runde</th>
+                {(["games", "pct", "avg_words", "best_round"] as const).map(key => (
+                  <th key={key}>
+                    <a href={filterLink(days, size, key)} style={{ color: "inherit", textDecoration: sortBy === key ? "underline" : "none" }}>
+                      {SORT_LABELS[key]}
+                    </a>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
