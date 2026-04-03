@@ -46,9 +46,12 @@ export default function GameProvider({ session, size, initialGameState, initialC
   }, [username]);
 
   useEffect(() => {
-    setSize(size);
-    // Clear stale chat messages for the old size immediately on size change
-    useChatStore.setState({ messages: [] });
+    // Only reset when navigating to a different size; on initial mount the
+    // store was already seeded with the correct size via the useRef guard.
+    if (useGameStore.getState().size !== size) {
+      setSize(size);
+      useChatStore.setState({ messages: [] });
+    }
   }, [size]);
 
   useEffect(() => {
