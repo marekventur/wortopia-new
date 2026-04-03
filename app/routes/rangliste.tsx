@@ -20,12 +20,24 @@ type PersonalRow = {
   best_round: number | null;
 };
 
+// Whitelisted sort expressions — secondary sort keeps ranking stable
+const SORT_OPTIONS = {
+  pct:        "pct DESC, games DESC",
+  games:      "games DESC, pct DESC",
+  avg_words:  "avg_words DESC, pct DESC",
+  best_round: "best_round DESC, pct DESC",
+} as const;
+
+type SortKey = keyof typeof SORT_OPTIONS;
+
 export async function loader({ request }: Route.LoaderArgs) {
   const { session, cookieHeader } = await getOrCreateSession(request);
 
   const url = new URL(request.url);
-  const days = parseInt(url.searchParams.get("days") ?? "30", 10);
-  const size = parseInt(url.searchParams.get("size") ?? "0", 10); // 0 = both
+  const days   = parseInt(url.searchParams.get("days") ?? "30", 10);
+  const size   = parseInt(url.searchParams.get("size") ?? "0", 10); // 0 = both
+  const sortBy = (url.searchParams.get("sortBy") ?? "pct") as SortKey;
+  const orderExpr = SORT_OPTIONS[sortBy] ?? SORT_OPTIONS.pct;
 
   const db = getDb();
 
@@ -36,7 +48,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const leaderboard = db.prepare(`
     WITH ranked AS (
       SELECT name, team, games, pct, avg_words, best_round, generated_at,
-             ROW_NUMBER() OVER (ORDER BY pct DESC, games DESC) AS rank
+             ROW_NUMBER() OVER (ORDER BY ${orderExpr}) AS rank
       FROM leaderboard_cache
       WHERE days = ? AND size = ?
     )
@@ -73,7 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const headers = cookieHeader ? { "Set-Cookie": cookieHeader } : undefined;
-  const payload = { session, days, size, leaderboard, personal, generatedAt, loggedInName };
+  const payload = { session, days, size, sortBy, leaderboard, personal, generatedAt, loggedInName };
   return headers ? Response.json(payload, { headers }) : payload;
 }
 
@@ -91,11 +103,18 @@ const SIZE_OPTIONS = [
   { label: "5×5", value: 5 },
 ];
 
-export default function Rangliste({ loaderData }: Route.ComponentProps) {
-  const { session, days, size, leaderboard, personal, generatedAt, loggedInName } = loaderData;
+const SORT_LABELS: Record<string, string> = {
+  pct:        "Ergebnis",
+  games:      "Runden",
+  avg_words:  "Wörter/Runde",
+  best_round: "Beste Runde",
+};
 
-  function filterLink(newDays: number, newSize: number) {
-    return `/rangliste?days=${newDays}&size=${newSize}`;
+export default function Rangliste({ loaderData }: Route.ComponentProps) {
+  const { session, days, size, sortBy, leaderboard, personal, generatedAt, loggedInName } = loaderData;
+
+  function filterLink(newDays: number, newSize: number, newSort: string) {
+    return `/rangliste?days=${newDays}&size=${newSize}&sortBy=${newSort}`;
   }
 
   return (
@@ -110,7 +129,7 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
             {DAY_OPTIONS.map(opt => (
               <a
                 key={opt.value}
-                href={filterLink(opt.value, size)}
+                href={filterLink(opt.value, size, sortBy)}
                 className={`btn btn-default btn-sm${days === opt.value ? " active" : ""}`}
               >
                 {opt.label}
@@ -121,10 +140,21 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
             {SIZE_OPTIONS.map(opt => (
               <a
                 key={opt.value}
-                href={filterLink(days, opt.value)}
+                href={filterLink(days, opt.value, sortBy)}
                 className={`btn btn-default btn-sm${size === opt.value ? " active" : ""}`}
               >
                 {opt.label}
+              </a>
+            ))}
+          </div>
+          <div className="btn-group">
+            {Object.entries(SORT_LABELS).map(([key, label]) => (
+              <a
+                key={key}
+                href={filterLink(days, size, key)}
+                className={`btn btn-default btn-sm${sortBy === key ? " active" : ""}`}
+              >
+                {label}
               </a>
             ))}
           </div>
@@ -205,7 +235,7 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
           </table>
         )}
         <p style={{ color: "#888", fontSize: "0.9em" }}>
-          Top 100 · geordnet nach Ergebnis
+          Top 100 · geordnet nach {SORT_LABELS[sortBy] ?? "Ergebnis"}
           {generatedAt && (
             <> · Stand: {new Date(generatedAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</>
           )}
