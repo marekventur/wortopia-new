@@ -24,14 +24,7 @@ jobs:
       - name: Deploy
         env:
           SSH_PRIVATE_KEY_CONTENT: ${{ secrets.SSH_PRIVATE_KEY }}
-          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
-          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
-          MAILGUN_FROM: ${{ secrets.MAILGUN_FROM }}
-          COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
-          GUEST_TOKEN_SECRET: ${{ secrets.GUEST_TOKEN_SECRET }}
-          RESET_TOKEN_SECRET: ${{ secrets.RESET_TOKEN_SECRET }}
-          SITE_URL: ${{ secrets.SITE_URL }}
-          DATABASE_PATH: ${{ secrets.DATABASE_PATH }}
+          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
         run: |
           if [[ -z "$SSH_PRIVATE_KEY_CONTENT" ]]; then
             echo "ERROR: SSH_PRIVATE_KEY secret is not set"
@@ -41,14 +34,12 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY_CONTENT" > "$key_file"
           chmod 600 "$key_file"
 
-          # Write .env.production.local on the server via a temp file
-          env_file="$RUNNER_TEMP/env.production.local"
-          printf 'COOKIE_SECRET=%s\nGUEST_TOKEN_SECRET=%s\nRESET_TOKEN_SECRET=%s\nMAILGUN_API_KEY=%s\nMAILGUN_DOMAIN=%s\nMAILGUN_FROM=%s\nSITE_URL=%s\nDATABASE_PATH=%s\n' \
-            "$COOKIE_SECRET" "$GUEST_TOKEN_SECRET" "$RESET_TOKEN_SECRET" \
-            "$MAILGUN_API_KEY" "$MAILGUN_DOMAIN" "$MAILGUN_FROM" \
-            "$SITE_URL" "$DATABASE_PATH" > "$env_file"
-          scp -i "$key_file" -o StrictHostKeyChecking=accept-new \
-            "$env_file" root@vps3.marekventur.com:/var/www/wortopia-new/.env.production.local
+          # Write .env.production.local on the server
+          if [[ -n "$ENV_FILE_CONTENT" ]]; then
+            printf '%s\n' "$ENV_FILE_CONTENT" | \
+              ssh -i "$key_file" -o StrictHostKeyChecking=accept-new root@vps3.marekventur.com \
+              "cat > /var/www/wortopia-new/.env.production.local"
+          fi
 
           ./deploy.sh "$key_file"
           # Key file is on ephemeral runner; no need to delete
