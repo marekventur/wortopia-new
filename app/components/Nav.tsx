@@ -13,6 +13,7 @@ const dropdownLinkStyle: CSSProperties ={ display: "block", padding: "3px 20px",
 export default function Nav({ session, size }: Props) {
   const submit = useSubmit();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const dropdownRef = useRef<HTMLLIElement>(null);
   const [playerCounts, setPlayerCounts] = useState<Record<number, number>>({});
 
@@ -46,7 +47,7 @@ export default function Nav({ session, size }: Props) {
     <div className="navbar navbar-default navbar-fixed-top navbar-inverse px-4" role="navigation">
       <div className="container-fluid">
         <div className="navbar-header">
-          <button type="button" className="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+          <button type="button" className="navbar-toggle" onClick={() => setNavOpen(o => !o)}>
             <span className="sr-only">Menü</span>
             <span className="icon-bar"></span>
             <span className="icon-bar"></span>
@@ -54,8 +55,9 @@ export default function Nav({ session, size }: Props) {
           </button>
           <a className="navbar-brand font-bold" href="/">Wortopia <small style={{ fontSize: "0.6em", opacity: 0.7 }}>v2</small></a>
         </div>
-        <div className="navbar-collapse collapse">
-          <ul className="nav navbar-nav navbar-right">
+        <div className={`navbar-collapse${navOpen ? '' : ' collapse'}`}>
+          {/* Desktop: user dropdown floated right */}
+          <ul className="nav navbar-nav navbar-right hidden-xs">
             {session.type === "user" ? (
               <li ref={dropdownRef} className={`dropdown${dropdownOpen ? " open" : ""}`}>
                 <a
@@ -91,6 +93,15 @@ export default function Nav({ session, size }: Props) {
             <li className={size === 5 ? "active" : ""}><a href="/5">5x5 {playerCounts[5] ? <span className="badge">{playerCounts[5]}</span> : null}</a></li>
             <li><a href="/regeln">Regeln</a></li>
             <li><a href="/rangliste">Rangliste</a></li>
+            {/* Mobile only: account items at the bottom */}
+            {session.type === "user" ? (
+              <>
+                <li className="visible-xs-block"><a href="/account">Account</a></li>
+                <li className="visible-xs-block"><a href="#" onClick={(e) => { e.preventDefault(); submit(null, { method: "post", action: "/api/logout" }); }}>Logout</a></li>
+              </>
+            ) : (
+              <li className="visible-xs-block"><a href="/login">Anmelden</a></li>
+            )}
           </ul>
         </div>
       </div>

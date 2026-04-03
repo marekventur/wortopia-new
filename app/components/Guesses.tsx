@@ -36,7 +36,9 @@ export default function Guesses() {
           <tbody>
             {myGuesses.map((guess, i) => (
               <tr key={i} className={guess.result === 'correct' ? 'success' : (rowClass[guess.result] ?? 'danger')}>
-                <td className="word" title={guess.description ?? undefined}>{guess.word}</td>
+                <td className="word">
+                  {guess.description ? <span data-tooltip={guess.description}>{guess.word}</span> : guess.word}
+                </td>
                 {guess.result === 'correct' ? (
                   <td className="points"><span className="badge">{guess.points}</span></td>
                 ) : (

@@ -66,7 +66,7 @@ export default function LastField() {
               <span key={i}>
                 <span
                   className={`word word--length-${word.word.length} word--word-${word.word.toLowerCase()} ${guessedByMe ? `word--guessed word--times-guessed-${count}` : 'word--not-guessed'}${isHighlighted ? ' word--highlight' : ''}`}
-                  title={word.description ?? undefined}
+                  data-tooltip={word.description ?? undefined}
                   onMouseEnter={() => {
                     setHoveredWordGuessedBy(guessedBy);
                     setHoveredChain(fieldContains(grid, word.word));

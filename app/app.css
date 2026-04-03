@@ -2,6 +2,40 @@ body {
   padding-top: 70px;
 }
 
+/* Custom tooltip (replaces native title= tooltips) */
+[data-tooltip] {
+  position: relative;
+}
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  transform: none;
+  background: #f5f5f5;
+  color: #333;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  font-size: 12px;
+  font-weight: normal;
+  text-transform: none;
+  min-width: 200px;
+  width: 300px;
+  max-width: 400px;
+  white-space: normal;
+  word-wrap: break-word;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1000;
+}
+[data-tooltip]:hover::after {
+  opacity: 1;
+}
+
 /* xs + sm (< 992px): stack columns vertically in DOM order */
 @media (max-width: 991px) {
   .wortopia .row {
