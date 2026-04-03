@@ -437,7 +437,7 @@ export default function CurrentField() {
             className="btn btn-default btn-sm"
             onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
             title="Feld drehen (oder 'r' eingeben)"
-            style={{ padding: '3px 7px', marginLeft: 4, flexShrink: 0, border: 'none', background: 'transparent' }}
+            style={{ padding: '0px 7px', height: '30px', marginLeft: 4, flexShrink: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <RotateCcw size={13} />
           </button>

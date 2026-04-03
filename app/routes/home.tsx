@@ -11,6 +11,7 @@ import Guesses from "../components/Guesses";
 import LastField from "../components/LastField";
 import { redirect } from "react-router";
 import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
+import { getGameServer } from "../../lib/gameServer.js";
 import GameProvider from "../components/GameProvider";
 import type { GameSize } from "../stores/gameStore";
 
@@ -21,8 +22,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const session = await getSession(request);
 
+  const server = getGameServer();
+  const playerCounts: Record<number, number> = {};
+  for (const s of [4, 5] as const) {
+    const lastRound = server.getLastRound(s);
+    playerCounts[s] = lastRound ? lastRound.results.players.length : 0;
+  }
+
   if (session) {
-    return { session, size };
+    return { session, size, playerCounts };
   }
 
   // First visit — assign a guest ID and set cookie
@@ -31,19 +39,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const cookieHeader = await sessionCookie.serialize(guestToken);
 
   return Response.json(
-    { session: { type: "guest", guestId } as Session, size },
+    { session: { type: "guest", guestId } as Session, size, playerCounts },
     { headers: { "Set-Cookie": cookieHeader } }
   );
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { session, size } = loaderData;
+  const { session, size, playerCounts } = loaderData;
   const isCooldown = useGameStore((s) => s.currentRound?.state === 'cooldown');
 
   return (
     <GameProvider session={session} size={size}>
     <div className="container">
-      <div><Nav session={session} size={size} /></div>
+      <div><Nav session={session} size={size} initialPlayerCounts={playerCounts} /></div>
 
       <div className="row">
         {/* Small screen only: field sits above player list in normal flow */}

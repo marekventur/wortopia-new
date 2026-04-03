@@ -9,6 +9,7 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import "react-tooltip/dist/react-tooltip.css";
 
 export const links: Route.LinksFunction = () => [
   {

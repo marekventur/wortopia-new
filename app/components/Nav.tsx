@@ -6,16 +6,17 @@ import type { GameSize } from "../stores/gameStore";
 type Props = {
   session: Session;
   size?: GameSize;
+  initialPlayerCounts?: Record<number, number>;
 };
 
 const dropdownLinkStyle: CSSProperties ={ display: "block", padding: "3px 20px", color: "#333", textDecoration: "none", fontWeight: "normal" };
 
-export default function Nav({ session, size }: Props) {
+export default function Nav({ session, size, initialPlayerCounts }: Props) {
   const submit = useSubmit();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const dropdownRef = useRef<HTMLLIElement>(null);
-  const [playerCounts, setPlayerCounts] = useState<Record<number, number>>({});
+  const [playerCounts, setPlayerCounts] = useState<Record<number, number>>(initialPlayerCounts ?? {});
 
   useEffect(() => {
     async function fetchCounts() {
