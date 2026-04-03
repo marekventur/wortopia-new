@@ -4,7 +4,8 @@ module.exports = {
   apps: [
     {
       name: process.env.NAME || "default-app",
-      script: "server.js",
+      script: "node",
+      args: "--import tsx/esm server.js",
       cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
