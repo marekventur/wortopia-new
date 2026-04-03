@@ -14,6 +14,19 @@ export default function Nav({ session, size }: Props) {
   const submit = useSubmit();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLLIElement>(null);
+  const [playerCounts, setPlayerCounts] = useState<Record<number, number>>({});
+
+  useEffect(() => {
+    async function fetchCounts() {
+      try {
+        const res = await fetch("/api/player-counts");
+        if (res.ok) setPlayerCounts(await res.json());
+      } catch {}
+    }
+    fetchCounts();
+    const id = setInterval(fetchCounts, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -74,8 +87,8 @@ export default function Nav({ session, size }: Props) {
             )}
           </ul>
           <ul className="nav navbar-nav">
-            <li className={size === 4 ? "active" : ""}><a href="/4">4x4</a></li>
-            <li className={size === 5 ? "active" : ""}><a href="/5">5x5</a></li>
+            <li className={size === 4 ? "active" : ""}><a href="/4">4x4 {playerCounts[4] ? <span className="badge">{playerCounts[4]}</span> : null}</a></li>
+            <li className={size === 5 ? "active" : ""}><a href="/5">5x5 {playerCounts[5] ? <span className="badge">{playerCounts[5]}</span> : null}</a></li>
             <li><a href="/regeln">Regeln</a></li>
             <li><a href="/rangliste">Rangliste</a></li>
           </ul>

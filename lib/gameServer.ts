@@ -376,6 +376,10 @@ export class GameServer extends EventEmitter {
     };
   }
 
+  getLastRound(size: GameSize): LastRoundPayload | null {
+    return this.state.get(size)?.lastRound ?? null;
+  }
+
   stop() {
     for (const s of this.state.values()) {
       if (s.tickTimer) clearTimeout(s.tickTimer);
