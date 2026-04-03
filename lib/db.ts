@@ -35,8 +35,6 @@ const SCHEMA = `
     email    TEXT NOT NULL
   );
 
-  -- session_token is generated in JS (crypto.randomUUID).
-  -- valid_until is set to now + 30 days at insert time.
   CREATE TABLE IF NOT EXISTS user_sessions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -47,8 +45,6 @@ const SCHEMA = `
     CHECK ((user_id IS NULL) != (guest_id IS NULL))
   );
 
-  -- Words are imported externally (not auto-generated).
-  -- 'description' replaces the old wiki table.
   CREATE TABLE IF NOT EXISTS words (
     word        TEXT    PRIMARY KEY COLLATE NOCASE,
     accepted    INTEGER NOT NULL DEFAULT 1,
@@ -58,6 +54,9 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS words_first_two_letters
     ON words (substr(replace(word, 'qu', 'q'), 1, 2));
+
+  CREATE INDEX IF NOT EXISTS words_three
+    ON words (substr(word, 1, 3));
 
   CREATE TABLE IF NOT EXISTS user_results (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,6 +71,9 @@ const SCHEMA = `
     size       INTEGER NOT NULL,
     UNIQUE (user_id, round_id, size)
   );
+
+  CREATE INDEX IF NOT EXISTS user_results_finished
+    ON user_results (finished);
 
   CREATE TABLE IF NOT EXISTS muted_users (
     user_id INTEGER NOT NULL
@@ -88,6 +90,7 @@ const SCHEMA = `
     user_id    INTEGER NOT NULL,
     username   TEXT    NOT NULL,
     message    TEXT    NOT NULL,
+    size       INTEGER NOT NULL DEFAULT 4,
     created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
@@ -119,64 +122,6 @@ export function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
-
-    // 3-letter prefix index used by fieldWords.ts.
-    // words_prefix (2-letter) and words_first_two_letters (QU-replacement) are legacy;
-    // words_first_two was a duplicate we added — drop it.
-    db.exec(`CREATE INDEX IF NOT EXISTS words_three ON words (substr(word, 1, 3))`);
-    try { db.exec(`DROP INDEX IF EXISTS words_first_two`); } catch { /* already gone */ }
-
-    // Migration: namespace chat by game size
-    const chatCols = (db.prepare(`PRAGMA table_info(chat_messages)`).all() as { name: string }[]).map(c => c.name);
-    if (!chatCols.includes('size')) {
-      db.exec(`ALTER TABLE chat_messages ADD COLUMN size INTEGER NOT NULL DEFAULT 4`);
-    }
-
-    // Migration: drop options column from users (no longer used)
-    const userColInfo = db.prepare(`PRAGMA table_info(users)`).all() as { name: string; notnull: number }[];
-    const userCols = userColInfo.map(c => c.name);
-    if (userCols.includes('options')) {
-      db.exec(`ALTER TABLE users DROP COLUMN options`);
-    }
-
-    // Migration: make pw_hash nullable (passwordless auth — existing hashes kept for recovery)
-    const pwHashCol = userColInfo.find(c => c.name === 'pw_hash');
-    if (pwHashCol?.notnull) {
-      db.pragma("foreign_keys = OFF");
-      db.exec(`
-        CREATE TABLE users_new (
-          id         INTEGER PRIMARY KEY AUTOINCREMENT,
-          name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-          pw_hash    TEXT,
-          team       TEXT    COLLATE NOCASE,
-          created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-          CHECK (length(name) >= 4),
-          CHECK (length(name) <= 15),
-          CHECK (name NOT LIKE 'guest_%'),
-          CHECK (team IS NULL OR (length(team) >= 5 AND length(team) <= 12))
-        );
-        INSERT INTO users_new SELECT * FROM users;
-        DROP TABLE users;
-        ALTER TABLE users_new RENAME TO users;
-      `);
-      db.pragma("foreign_keys = ON");
-    }
-
-    // Index for rangliste time-filtered queries
-    db.exec(`CREATE INDEX IF NOT EXISTS user_results_finished ON user_results (finished)`);
-
-    // Migration: add round_id + unique constraint to user_results
-    const resultCols = (db.prepare(`PRAGMA table_info(user_results)`).all() as { name: string }[]).map(c => c.name);
-    if (!resultCols.includes('round_id')) {
-      db.exec(`ALTER TABLE user_results ADD COLUMN round_id INTEGER NOT NULL DEFAULT 0`);
-      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS user_results_unique ON user_results (user_id, round_id, size)`);
-    }
-    if (!resultCols.includes('max_words')) {
-      db.exec(`ALTER TABLE user_results ADD COLUMN max_words INTEGER NOT NULL DEFAULT 0`);
-    }
-    if (!resultCols.includes('max_points')) {
-      db.exec(`ALTER TABLE user_results ADD COLUMN max_points INTEGER NOT NULL DEFAULT 0`);
-    }
   }
   return db;
 }
