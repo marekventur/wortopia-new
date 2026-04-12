@@ -34,17 +34,13 @@ export function refreshLeaderboardCache(): void {
       conditions.push(`finished >= datetime('now', '-${days} days')`);
     }
 
-    const indexHint = days > 0
-      ? "INDEXED BY user_results_by_time"
-      : "INDEXED BY user_results_by_user";
-
     const rows = db.prepare(`
       SELECT u.name, u.team,
              COUNT(*)                                              AS games,
              ROUND(100.0 * SUM(r.points) / SUM(r.max_points), 1) AS pct,
              ROUND(1.0  * SUM(r.words)  / COUNT(*), 1)           AS avg_words,
              MAX(r.points)                                        AS best_round
-      FROM user_results r ${indexHint}
+      FROM user_results r
       JOIN users u ON u.id = r.user_id
       WHERE ${conditions.join(" AND ")}
       GROUP BY r.user_id

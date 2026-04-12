@@ -12,10 +12,12 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: process.env.PORT || 3000,
+        // GCS_BACKUP_CREDENTIALS: process.env.GCS_BACKUP_CREDENTIALS,
       },
       env_production: {
         NODE_ENV: "production",
         PORT: process.env.PORT || 3000,
+        // GCS_BACKUP_CREDENTIALS: process.env.GCS_BACKUP_CREDENTIALS,
       },
       // VPS: set DATABASE_PATH if you want DB outside app dir, e.g. /var/lib/<name>/data/app.db
       // env: { DATABASE_PATH: "/var/lib/default-app/data/app.db" },

@@ -46,9 +46,11 @@ if (DEVELOPMENT) {
   const gameSource = await viteDevServer.ssrLoadModule("./lib/gameWsServer.ts");
   const { getGameServer } = await viteDevServer.ssrLoadModule("./lib/gameServer.ts");
   const { scheduleLeaderboardRefresh } = await viteDevServer.ssrLoadModule("./lib/leaderboardCache.ts");
+  const { scheduleDbBackup } = await viteDevServer.ssrLoadModule("./lib/dbBackup.ts");
   const gameServer = getGameServer();
   await gameServer.init();
   scheduleLeaderboardRefresh();
+  scheduleDbBackup();
   const gameWssMap = gameSource.createGameWsServer();
 
   mountWsRouter(httpServer, gameWssMap);
@@ -66,9 +68,11 @@ if (DEVELOPMENT) {
   const { getGameServer } = await import("./lib/gameServer.js");
   const { createGameWsServer } = await import("./lib/gameWsServer.js");
   const { scheduleLeaderboardRefresh } = await import("./lib/leaderboardCache.js");
+  const { scheduleDbBackup } = await import("./lib/dbBackup.js");
   const gameServer = getGameServer();
   await gameServer.init();
   scheduleLeaderboardRefresh();
+  scheduleDbBackup();
   const gameWssMap = createGameWsServer();
 
   mountWsRouter(httpServer, gameWssMap);
