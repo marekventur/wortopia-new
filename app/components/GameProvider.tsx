@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useGameStore, type GameSize } from "../stores/gameStore";
 import { useChatStore } from "../stores/chatStore";
+import { useProposalStore } from "../stores/proposalStore";
 import type { WsIncomingMsg } from "../../lib/gameTypes.js";
 import type { Session } from "../../lib/session.js";
 
@@ -74,6 +75,7 @@ export default function GameProvider({ session, size, children }: Props) {
         else if (msg.type === "guess_result") _applyGuessResult(msg);
         else if (msg.type === "chat_init") useChatStore.getState().setMessages(msg.messages);
         else if (msg.type === "chat_message") useChatStore.getState().addMessage(msg.message);
+        else if (msg.type === "proposals") useProposalStore.getState().mergeProposals(msg.proposals);
       };
 
       ws.onclose = () => {

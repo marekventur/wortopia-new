@@ -3,6 +3,9 @@
  * No Node.js imports — safe to use from both client and server.
  */
 import type { ChatMessage } from "./chatTypes.js";
+import type { ProposalMap } from "./proposalTypes.js";
+
+export type { ProposalMap };
 
 export type RoundPhase = "ongoing" | "cooldown";
 
@@ -76,6 +79,8 @@ export type WsGuessResultMsg = {
 export type WsChatInitMsg = { type: "chat_init"; messages: ChatMessage[] };
 export type WsChatMessageMsg = { type: "chat_message"; message: ChatMessage };
 
-export type WsIncomingMsg = WsUpdateMsg | WsTickMsg | WsGuessResultMsg | WsChatInitMsg | WsChatMessageMsg;
+export type WsProposalsMsg = { type: "proposals"; proposals: ProposalMap };
+
+export type WsIncomingMsg = WsUpdateMsg | WsTickMsg | WsGuessResultMsg | WsChatInitMsg | WsChatMessageMsg | WsProposalsMsg;
 
 export type { ChatMessage };

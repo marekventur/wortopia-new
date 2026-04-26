@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useChatStore } from "../stores/chatStore";
 import { useGameStore } from "../stores/gameStore";
+import { useProposalStore } from "../stores/proposalStore";
 import { fieldContains, fieldToGrid } from "../../lib/fieldContains.js";
+import ProposalEntry from "./ProposalEntry.js";
 import type { Session } from "../../lib/session.js";
+import { useLocalStorageState } from "~/hooks/useLocalStorageState";
+import { LuTicketCheck, LuTicketMinus } from "react-icons/lu";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -14,8 +18,11 @@ type Props = {
   session: Session;
 };
 
+const PROPOSAL_PREFIX = "PROPOSAL:";
+
 export default function Chat({ session }: Props) {
   const messages = useChatStore((s) => s.messages);
+  const proposals = useProposalStore((s) => s.proposals);
   const send = useChatStore((s) => s.send);
   const connected = useChatStore((s) => s.connected);
   const currentRound = useGameStore((s) => s.currentRound);
@@ -25,16 +32,32 @@ export default function Chat({ session }: Props) {
   const secondsRemaining = currentRound?.seconds_remaining ?? 0;
   const [input, setInput] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [showProposals, setShowProposals] = useLocalStorageState("showProposals", true);
 
+  const showProposalButton = useMemo(() => {
+    return (session.type !== "guest") && messages.some(msg => msg.message.startsWith(PROPOSAL_PREFIX));
+  }, [messages, session]);
   const displayName =
     session.type === "user" ? session.user.name : `Gast ${session.guestId}`;
 
-  useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [messages]);
+  // Keep the viewport pinned to the latest messages whenever content height changes
+  // (reload: proposals often arrive after chat_init, so message count alone is not enough).
+  useLayoutEffect(() => {
+    const outer = bodyRef.current;
+    const inner = innerRef.current;
+    if (!outer || !inner) return;
+
+    const scrollToBottom = () => {
+      outer.scrollTop = outer.scrollHeight;
+    };
+
+    scrollToBottom();
+    const ro = new ResizeObserver(scrollToBottom);
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, []);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
@@ -60,16 +83,26 @@ export default function Chat({ session }: Props) {
     <>
       <div className="chat panel panel-default hidden-xs hidden-sm">
         <div className="panel-body chat-content" ref={bodyRef}>
-          {messages.map((msg) => (
-            <div key={msg.id}>
-              <span style={{ color: "#aaa", marginRight: 6 }}>
-                {new Date(msg.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
-              </span>
-              <strong>{msg.username}</strong> {msg.message}
-            </div>
-          ))}
+          <div ref={innerRef}>
+          {messages.map((msg) => {
+            if (msg.message.startsWith(PROPOSAL_PREFIX)) {
+              const id = msg.message.slice(PROPOSAL_PREFIX.length);
+              const proposal = proposals[id];
+              if (!proposal || !showProposals) return null;
+              return <ProposalEntry key={msg.id} proposal={proposal} session={session} />;
+            }
+            return (
+              <div key={msg.id}>
+                <span style={{ color: "#aaa", marginRight: 6 }}>
+                  {new Date(msg.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <strong>{msg.username}</strong> {msg.message}
+              </div>
+            );
+          })}
+          </div>
         </div>
-        <div className="panel-footer">
+        <div className="panel-footer chat-footer">
           <div className="input-group input-group-sm">
             <span className="input-group-addon">{displayName}</span>
             <input
@@ -87,7 +120,15 @@ export default function Chat({ session }: Props) {
               <span className="input-group-addon">{formatTime(secondsRemaining)}</span>
             )}
           </div>
-        </div>
+          {showProposalButton && (
+            <div className="chat-footer-actions">
+              <button onClick={() => setShowProposals(!showProposals)}>
+                {showProposals ? <LuTicketCheck /> : <LuTicketMinus />}  
+              </button>
+            </div>
+          )}
+        </div>  
+       
       </div>
 
       <span id="translation-guest-prefix" style={{ display: "none" }}>Gast </span>

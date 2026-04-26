@@ -2,20 +2,25 @@ import { WebSocketServer, WebSocket } from "ws";
 import { getSession } from "./session.js";
 import { getGameServer } from "./gameServer.js";
 import { getChatServer } from "./chatServer.js";
+import { getWordProposalServer } from "./wordProposalServer.js";
 import type { TickPayload, UpdatePayload } from "./gameServer.js";
 import type { ChatMessage } from "./chatTypes.js";
+import type { ProposalMap } from "./proposalTypes.js";
 import { SIZES, type GameSize } from "./gameConfig.js";
 
 type IncomingFrame =
   | { type: "guess"; word: string }
-  | { type: "chat_message"; message: string };
+  | { type: "chat_message"; message: string }
+  | { type: "propose_word"; action: "update" | "remove"; word: string; description?: string; base?: string }
+  | { type: "vote_for_proposal"; id: string; vote: "support" | "oppose" | null };
 
 type OutgoingFrame =
   | { type: "update"; current_round: UpdatePayload["current_round"]; last_round: UpdatePayload["last_round"] }
   | { type: "tick"; current_round: TickPayload["current_round"] }
   | { type: "guess_result"; word: string; result: string; points: number; description: string | null; player_results: UpdatePayload["current_round"]["results"] }
   | { type: "chat_init"; messages: ChatMessage[] }
-  | { type: "chat_message"; message: ChatMessage };
+  | { type: "chat_message"; message: ChatMessage }
+  | { type: "proposals"; proposals: ProposalMap };
 
 function send(ws: WebSocket, frame: OutgoingFrame) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -30,6 +35,7 @@ function send(ws: WebSocket, frame: OutgoingFrame) {
 export function createGameWsServer(): Map<string, WebSocketServer> {
   const gameServer = getGameServer();
   const chatServer = getChatServer();
+  const wordProposalServer = getWordProposalServer();
   const servers = new Map<string, WebSocketServer>();
 
   for (const size of SIZES) {
@@ -69,6 +75,9 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
       // Send chat history for this size
       send(ws, { type: "chat_init", messages: chatServer.getHistory(size) });
 
+      // Send current proposals (all sizes, last 60 min) so the chat backlog can render them
+      send(ws, { type: "proposals", proposals: wordProposalServer.getProposals() });
+
       // ── Game event subscriptions ──────────────────────────────────────────────
 
       const onTick = (payload: TickPayload) => {
@@ -93,12 +102,20 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
       };
       chatServer.on("message", onChatMessage);
 
+      // ── Proposal event subscription ───────────────────────────────────────────
+
+      const onProposalsUpdate = ({ proposals }: { proposals: ProposalMap }) => {
+        send(ws, { type: "proposals", proposals });
+      };
+      wordProposalServer.on("proposals_update", onProposalsUpdate);
+
       // ── Cleanup on disconnect ─────────────────────────────────────────────────
 
       ws.on("close", () => {
         gameServer.off(`tick:${size}`, onTick);
         gameServer.off(`update:${size}`, onUpdate);
         chatServer.off("message", onChatMessage);
+        wordProposalServer.off("proposals_update", onProposalsUpdate);
       });
 
       // ── Incoming messages ─────────────────────────────────────────────────────
@@ -129,6 +146,34 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
         if (frame.type === "chat_message") {
           const text = String(frame.message ?? "").trim();
           if (text) chatServer.addMessage(userId, username, text, size);
+          return;
+        }
+
+        if (frame.type === "propose_word") {
+          const word = String(frame.word ?? "").trim().toLowerCase();
+          if (!word) return;
+          try {
+            wordProposalServer.propose(
+              userId,
+              username,
+              word,
+              frame.action,
+              frame.description ?? null,
+              frame.base ?? null,
+              size,
+            );
+          } catch (err) {
+            console.error("[GameWsServer] propose_word failed:", err);
+          }
+          return;
+        }
+
+        if (frame.type === "vote_for_proposal") {
+          try {
+            wordProposalServer.vote(userId, String(frame.id ?? ""), frame.vote ?? null);
+          } catch (err) {
+            console.error("[GameWsServer] vote_for_proposal failed:", err);
+          }
           return;
         }
       });

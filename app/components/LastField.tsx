@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Tooltip } from "react-tooltip";
 import type { TooltipRefProps } from "react-tooltip";
 import { useGameStore } from "../stores/gameStore.js";
+import type { ProposalAction } from "../../lib/proposalTypes.js";
 import { fieldToGrid, fieldContains, type Cell } from "../../lib/fieldContains.js";
 import type { WordDetail } from "lib/gameTypes.js";
 
@@ -61,6 +62,12 @@ export default function LastField() {
     if (tooltipPinned) return;
     tooltipRef.current?.close();
     setTooltipWord(null);
+  };
+
+  const sendProposal = (word: string, action: ProposalAction, description?: string) => {
+    useGameStore.getState()._send?.(
+      JSON.stringify({ type: "propose_word", action, word: word.toLowerCase(), description }),
+    );
   };
 
   const handleClick = (i: number, word: typeof words[number]) => {
@@ -143,19 +150,43 @@ export default function LastField() {
           tooltipWord ? (
             <>
               <div>
-                {tooltipWord.description 
+                {tooltipWord.description
                   ? <>
-                    {tooltipWord.description} 
-                    {tooltipPinned && isLoggedIn && <button className="last-round-word-tooltip-pencil-button">
+                    {tooltipWord.description}
+                    {tooltipPinned && isLoggedIn && <button
+                      className="last-round-word-tooltip-pencil-button"
+                      onClick={() => {
+                        const desc = window.prompt(
+                          `Beschreibung für ${tooltipWord.word.toUpperCase()} bearbeiten:`,
+                          tooltipWord.description ?? "",
+                        );
+                        if (desc !== null) sendProposal(tooltipWord.word, "update", desc);
+                      }}
+                    >
                       <span className="glyphicon glyphicon-pencil"></span>
                     </button>}
                   </>
                 : tooltipPinned && isLoggedIn
-                  ? <button className="last-round-word-tooltip-add-description-button">
+                  ? <button
+                      className="last-round-word-tooltip-add-description-button"
+                      onClick={() => {
+                        const desc = window.prompt(
+                          `Beschreibung für ${tooltipWord.word.toUpperCase()} hinzufügen:`,
+                        );
+                        if (desc !== null) sendProposal(tooltipWord.word, "update", desc);
+                      }}
+                    >
                       Beschreibung hinzufügen <span className="glyphicon glyphicon-pencil"></span>
                     </button>
                   : null}
-                  {tooltipPinned && isLoggedIn && <button className="last-round-word-tooltip-delete-button">
+                  {tooltipPinned && isLoggedIn && <button
+                    className="last-round-word-tooltip-delete-button"
+                    onClick={() => {
+                      if (window.confirm(`"${tooltipWord.word.toUpperCase()}" aus der Wortliste entfernen vorschlagen?`)) {
+                        sendProposal(tooltipWord.word, "remove");
+                      }
+                    }}
+                  >
                     <span className="glyphicon glyphicon-trash"></span>
                   </button>}
                 </div>

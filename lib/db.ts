@@ -121,6 +121,30 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS round_guesses_lookup
     ON round_guesses (round_id, size, user_id);
+
+  CREATE TABLE IF NOT EXISTS word_proposals (
+    id          TEXT    PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    username    TEXT    NOT NULL,
+    word        TEXT    NOT NULL COLLATE NOCASE,
+    action      TEXT    NOT NULL CHECK (action IN ('update', 'remove')),
+    description TEXT,
+    base        TEXT,
+    status      TEXT    NOT NULL DEFAULT 'open'
+                CHECK (status IN ('open', 'approved', 'rejected', 'sent_for_approval')),
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    closes_at   TEXT    NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS word_proposals_created
+    ON word_proposals (created_at);
+
+  CREATE TABLE IF NOT EXISTS word_proposal_votes (
+    proposal_id TEXT    NOT NULL REFERENCES word_proposals(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL,
+    vote        TEXT    NOT NULL CHECK (vote IN ('support', 'oppose')),
+    PRIMARY KEY (proposal_id, user_id)
+  );
 `;
 
 let db: Database.Database | null = null;
