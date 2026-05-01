@@ -8,7 +8,7 @@ const VOTE_WINDOW_MINUTES = 30;
 const HISTORY_WINDOW_MINUTES = 60;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
-// const SPIELWOERTER_API_URL = "https://spielwoerter.de/api/partner/suggestions";
+const SPIELWOERTER_API_URL = "https://spielwoerter.de/api/partner/suggestions";
 
 type ProposalRow = {
   id: string;
@@ -250,29 +250,28 @@ export class WordProposalServer extends EventEmitter {
       updateStatus.run(status, row.id);
       this.proposedWords.delete(row.word.toLowerCase());
 
-      if (status !== "rejected") {
-        // TODO: submit to Spielwoerter.de partner API
-        // const key = process.env.SPIELWOERTER_API_KEY ?? "";
-        // const spielwoerterAction = row.action === "remove" ? "remove" : "upsert";
-        // void fetch(SPIELWOERTER_API_URL, {
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json", "X-API-Key": key },
-        //   body: JSON.stringify({
-        //     suggestions: [
-        //       {
-        //         word: row.word,
-        //         action: spielwoerterAction,
-        //         author_email: `user-${row.user_id}@wortopia.de`,
-        //         ...(spielwoerterAction === "upsert" && {
-        //           payload: {
-        //             ...(row.description && { description: row.description }),
-        //             ...(row.base && { base: row.base }),
-        //           },
-        //         }),
-        //       },
-        //     ],
-        //   }),
-        // });
+      if (status !== "rejected" && process.env.NODE_ENV === "production") {
+        const key = process.env.SPIELWOERTER_API_KEY ?? "";
+        const spielwoerterAction = row.action === "remove" ? "remove" : "upsert";
+        void fetch(SPIELWOERTER_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-API-Key": key },
+          body: JSON.stringify({
+            suggestions: [
+              {
+                word: row.word,
+                action: spielwoerterAction,
+                author_email: `user-${row.user_id}@wortopia.de`,
+                ...(spielwoerterAction === "upsert" && {
+                  payload: {
+                    ...(row.description && { description: row.description }),
+                    ...(row.base && { base: row.base }),
+                  },
+                }),
+              },
+            ],
+          }),
+        });
       }
     }
 
