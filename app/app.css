@@ -262,7 +262,7 @@ body {
 }
 
 /* guesses.styl */
-.guesses .word {
+.guesses td.word {
   padding-left: 16px;
   text-transform: uppercase;
 }

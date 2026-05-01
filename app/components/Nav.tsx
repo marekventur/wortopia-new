@@ -94,6 +94,7 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
             <li className={size === 5 ? "active" : ""}><a href="/5">5x5 {playerCounts[5] ? <span className="badge">{playerCounts[5]}</span> : null}</a></li>
             <li><a href="/regeln">Regeln</a></li>
             <li><a href="/rangliste">Rangliste</a></li>
+            <li><a href="https://spielwoerter.de" target="_blank" rel="noopener noreferrer">Wörterbuch</a></li>
             {/* Mobile only: account items at the bottom */}
             {session.type === "user" ? (
               <>
