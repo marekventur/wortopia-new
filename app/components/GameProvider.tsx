@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useGameStore, type GameSize } from "../stores/gameStore";
 import { useChatStore } from "../stores/chatStore";
 import { useProposalStore } from "../stores/proposalStore";
-import type { WsIncomingMsg } from "../../lib/gameTypes.js";
+import type { WsIncomingMsg, WsEnrichResultMsg } from "../../lib/gameTypes.js";
 import type { Session } from "../../lib/session.js";
 
 const RECONNECT_DELAY_MS = 3000;
@@ -76,6 +76,8 @@ export default function GameProvider({ session, size, children }: Props) {
         else if (msg.type === "chat_init") useChatStore.getState().setMessages(msg.messages);
         else if (msg.type === "chat_message") useChatStore.getState().addMessage(msg.message);
         else if (msg.type === "proposals") useProposalStore.getState().mergeProposals(msg.proposals);
+        else if (msg.type === "proposed_words") useGameStore.getState().setProposedWords(msg.words);
+        else if (msg.type === "enrich_result") useGameStore.getState().setEnrichResult(msg as WsEnrichResultMsg);
       };
 
       ws.onclose = () => {

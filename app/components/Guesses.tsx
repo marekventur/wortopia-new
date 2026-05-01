@@ -1,4 +1,5 @@
-import { useGameStore } from "../stores/gameStore.js";
+import { useGameStore, type GuessEntry } from "../stores/gameStore.js";
+import { usePinnableTooltip } from "../hooks/usePinnableTooltip.js";
 
 const statusLabels: Record<string, string> = {
   duplicate: 'Bereits geraten',
@@ -26,6 +27,10 @@ export default function Guesses() {
   const myGuesses = useGameStore((s) => s.myGuesses);
   const totalPoints = myGuesses.reduce((sum, g) => sum + (g.result === 'correct' ? g.points : 0), 0);
 
+  const { tooltipPinned, isLoggedIn, proposedWords, enrichingWord,
+          handleMouseEnter, handleMouseLeave, handleClick, requestEnrich, renderTooltip } =
+    usePinnableTooltip<GuessEntry>();
+
   if (myGuesses.length === 0) return null;
 
   return (
@@ -37,7 +42,20 @@ export default function Guesses() {
             {myGuesses.map((guess, i) => (
               <tr key={i} className={guess.result === 'correct' ? 'success' : (rowClass[guess.result] ?? 'danger')}>
                 <td className="word">
-                  {guess.description ? <span data-tooltip={guess.description}>{guess.word}</span> : guess.word}
+                  <span
+                    id={`grw-${i}`}
+                    className={`word${guess.description ? ' word--has-description' : ''}`}
+                    style={{ cursor: isLoggedIn && (guess.description || guess.result === 'not_in_dictionary') ? 'pointer' : 'default' }}
+                    onMouseEnter={() => handleMouseEnter(`grw-${i}`, guess)}
+                    onMouseLeave={handleMouseLeave}
+                    onClick={() => {
+                      if (guess.description || guess.result === 'not_in_dictionary') {
+                        handleClick(`grw-${i}`, guess);
+                      }
+                    }}
+                  >
+                    {guess.word}
+                  </span>
                 </td>
                 {guess.result === 'correct' ? (
                   <td className="points"><span className="badge">{guess.points}</span></td>
@@ -51,6 +69,24 @@ export default function Guesses() {
           </tbody>
         </table>
       </div>
+
+      {renderTooltip((word) => (
+        <div>
+          {word.description && <span>{word.description}</span>}
+          {tooltipPinned && isLoggedIn && word.result === 'not_in_dictionary' && (
+            proposedWords.has(word.word.toLowerCase())
+              ? <span className="word-tooltip-loading">Bereits vorgeschlagen</span>
+              : enrichingWord === word.word.toLowerCase()
+                ? <span className="word-tooltip-loading">Beschreibung wird geladen…</span>
+                : <button
+                    className="word-tooltip-add-to-dict-button"
+                    onClick={() => requestEnrich(word.word.toLowerCase())}
+                  >
+                    Zum Wörterbuch hinzufügen <span className="glyphicon glyphicon-plus"></span>
+                  </button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

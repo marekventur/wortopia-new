@@ -8,11 +8,14 @@ import type { ChatMessage } from "./chatTypes.js";
 import type { ProposalMap } from "./proposalTypes.js";
 import { SIZES, type GameSize } from "./gameConfig.js";
 
+const SPIELWOERTER_ENRICH_URL = "https://spielwoerter.de/api/partner/enrich";
+
 type IncomingFrame =
   | { type: "guess"; word: string }
   | { type: "chat_message"; message: string }
-  | { type: "propose_word"; action: "update" | "remove"; word: string; description?: string; base?: string }
-  | { type: "vote_for_proposal"; id: string; vote: "support" | "oppose" | null };
+  | { type: "propose_word"; action: "add" | "update" | "remove"; word: string; description?: string; base?: string }
+  | { type: "vote_for_proposal"; id: string; vote: "support" | "oppose" | null }
+  | { type: "enrich_word"; word: string };
 
 type OutgoingFrame =
   | { type: "update"; current_round: UpdatePayload["current_round"]; last_round: UpdatePayload["last_round"] }
@@ -20,7 +23,9 @@ type OutgoingFrame =
   | { type: "guess_result"; word: string; result: string; points: number; description: string | null; player_results: UpdatePayload["current_round"]["results"] }
   | { type: "chat_init"; messages: ChatMessage[] }
   | { type: "chat_message"; message: ChatMessage }
-  | { type: "proposals"; proposals: ProposalMap };
+  | { type: "proposals"; proposals: ProposalMap }
+  | { type: "proposed_words"; words: string[] }
+  | { type: "enrich_result"; word: string; description: string | null; base: string | null };
 
 function send(ws: WebSocket, frame: OutgoingFrame) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -41,6 +46,15 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
   for (const size of SIZES) {
     const wss = new WebSocketServer({ noServer: true });
     servers.set(`/ws/game/${size}`, wss);
+
+    // Size-level: release held proposals when the round transitions to cooldown.
+    // gameServer emits update:{size} on the ongoing→cooldown transition with state="cooldown".
+    const onSizeUpdate = (payload: UpdatePayload) => {
+      if (payload.current_round?.state === "cooldown") {
+        wordProposalServer.releaseHeld(size);
+      }
+    };
+    gameServer.on(`update:${size}`, onSizeUpdate);
 
     wss.on("connection", async (ws, req) => {
       // Identify connecting user
@@ -77,6 +91,7 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
 
       // Send current proposals (all sizes, last 60 min) so the chat backlog can render them
       send(ws, { type: "proposals", proposals: wordProposalServer.getProposals() });
+      send(ws, { type: "proposed_words", words: wordProposalServer.getProposedWords() });
 
       // ── Game event subscriptions ──────────────────────────────────────────────
 
@@ -109,6 +124,11 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
       };
       wordProposalServer.on("proposals_update", onProposalsUpdate);
 
+      const onProposedWordsUpdate = ({ words }: { words: string[] }) => {
+        send(ws, { type: "proposed_words", words });
+      };
+      wordProposalServer.on("proposed_words_update", onProposedWordsUpdate);
+
       // ── Cleanup on disconnect ─────────────────────────────────────────────────
 
       ws.on("close", () => {
@@ -116,11 +136,12 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
         gameServer.off(`update:${size}`, onUpdate);
         chatServer.off("message", onChatMessage);
         wordProposalServer.off("proposals_update", onProposalsUpdate);
+        wordProposalServer.off("proposed_words_update", onProposedWordsUpdate);
       });
 
       // ── Incoming messages ─────────────────────────────────────────────────────
 
-      ws.on("message", (data) => {
+      ws.on("message", async (data) => {
         let frame: IncomingFrame;
         try {
           frame = JSON.parse(data.toString());
@@ -153,6 +174,8 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
           const word = String(frame.word ?? "").trim().toLowerCase();
           if (!word) return;
           try {
+            const phase = gameServer.getInitialPayload(size as GameSize, userId).current_round?.state;
+            const held = phase === "ongoing";
             wordProposalServer.propose(
               userId,
               username,
@@ -161,9 +184,30 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
               frame.description ?? null,
               frame.base ?? null,
               size,
+              held,
             );
           } catch (err) {
             console.error("[GameWsServer] propose_word failed:", err);
+          }
+          return;
+        }
+
+        if (frame.type === "enrich_word") {
+          const word = String(frame.word ?? "").trim().toLowerCase();
+          if (!word) return;
+          const apiKey = process.env.SPIELWOERTER_API_KEY ?? "";
+          try {
+            const resp = await fetch(`${SPIELWOERTER_ENRICH_URL}/${encodeURIComponent(word)}`, {
+              headers: { "X-API-Key": apiKey },
+            });
+            if (resp.ok) {
+              const data = await resp.json() as { description: string | null; base: string | null };
+              send(ws, { type: "enrich_result", word, description: data.description, base: data.base });
+            } else {
+              send(ws, { type: "enrich_result", word, description: null, base: null });
+            }
+          } catch {
+            send(ws, { type: "enrich_result", word, description: null, base: null });
           }
           return;
         }

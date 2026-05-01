@@ -65,7 +65,7 @@ export default function Chat({ session }: Props) {
     if (!text || !connected) return;
 
     // Single word that can be formed on the current field → send as a game guess
-    if (!text.includes(" ") && currentRound?.field) {
+    if (!text.includes(" ") && currentRound?.field && !isCooldown) {
       const grid = fieldToGrid(currentRound.field, size);
       if (fieldContains(grid, text)) {
         guess(text);

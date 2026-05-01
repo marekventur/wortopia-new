@@ -81,6 +81,15 @@ export type WsChatMessageMsg = { type: "chat_message"; message: ChatMessage };
 
 export type WsProposalsMsg = { type: "proposals"; proposals: ProposalMap };
 
-export type WsIncomingMsg = WsUpdateMsg | WsTickMsg | WsGuessResultMsg | WsChatInitMsg | WsChatMessageMsg | WsProposalsMsg;
+export type WsEnrichResultMsg = {
+  type: "enrich_result";
+  word: string;
+  description: string | null;
+  base: string | null;
+};
+
+export type WsProposedWordsMsg = { type: "proposed_words"; words: string[] };
+
+export type WsIncomingMsg = WsUpdateMsg | WsTickMsg | WsGuessResultMsg | WsChatInitMsg | WsChatMessageMsg | WsProposalsMsg | WsEnrichResultMsg | WsProposedWordsMsg;
 
 export type { ChatMessage };

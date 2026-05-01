@@ -325,35 +325,48 @@ body {
   color: #428bca;
 }
 
-.last-round-word-tooltip {
+.word-tooltip {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.last-round-word-tooltip .glyphicon {
+.word-tooltip .glyphicon {
   margin-left: 8px;
 }
 
-.last-round-word-tooltip-pencil-button {
+.word-tooltip-pencil-button {
   cursor: pointer;
   background: none;
   border: none;
 }
 
-.last-round-word-tooltip-add-description-button {
+.word-tooltip-add-description-button {
   cursor: pointer;
   background: none;
   border: none;
   font-style: italic;
 }
 
-.last-round-word-tooltip-delete-button {
+.word-tooltip-delete-button {
   cursor: pointer;
   background: none;
   padding: 0;
   border: none;
   color: #d9534f;
+}
+
+.word-tooltip-add-to-dict-button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-style: italic;
+  padding: 0;
+}
+
+.word-tooltip-loading {
+  font-style: italic;
+  opacity: 0.7;
 }
 
 /* ── Proposal chat entries ────────────────────────────────────────────────── */

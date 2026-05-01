@@ -2,7 +2,7 @@
  * Shared proposal types — no Node.js imports, safe for client and server.
  */
 
-export type ProposalAction = "update" | "remove";
+export type ProposalAction = "add" | "update" | "remove";
 export type ProposalStatus = "open" | "approved" | "rejected" | "sent_for_approval";
 
 /** Wire-safe type sent to clients. Voter identity is never exposed. */

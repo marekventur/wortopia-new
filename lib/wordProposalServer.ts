@@ -43,9 +43,46 @@ function rowToProposal(row: ProposalRow): Proposal {
 }
 
 export class WordProposalServer extends EventEmitter {
+  /** Words with an open proposal, word (lowercase) → creation timestamp ms. */
+  private proposedWords = new Map<string, number>();
+
   constructor() {
     super();
+    this.seedProposedWords();
     this.startFinalizationSweep();
+    this.startProposedWordsCleanup();
+  }
+
+  /** Seed from DB on startup so a server restart doesn't forget active proposals. */
+  private seedProposedWords(): void {
+    const open = getDb()
+      .prepare(
+        `SELECT word, created_at FROM word_proposals WHERE status = 'open'
+         AND closes_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+      )
+      .all() as { word: string; created_at: string }[];
+    for (const row of open) {
+      this.proposedWords.set(row.word.toLowerCase(), new Date(row.created_at).getTime());
+    }
+  }
+
+  isProposed(word: string): boolean {
+    return this.proposedWords.has(word.toLowerCase());
+  }
+
+  getProposedWords(): string[] {
+    return Array.from(this.proposedWords.keys());
+  }
+
+  private startProposedWordsCleanup(): void {
+    setInterval(() => {
+      const cutoff = Date.now() - VOTE_WINDOW_MINUTES * 60 * 1000;
+      let changed = false;
+      for (const [word, ts] of this.proposedWords) {
+        if (ts < cutoff) { this.proposedWords.delete(word); changed = true; }
+      }
+      if (changed) this.emit("proposed_words_update", { words: this.getProposedWords() });
+    }, 60 * 1000);
   }
 
   propose(
@@ -56,25 +93,56 @@ export class WordProposalServer extends EventEmitter {
     description: string | null,
     base: string | null,
     size: number,
+    held = false,
   ): Proposal | null {
     if (userId < 0) return null; // guests cannot propose
+    if (this.proposedWords.has(word)) return null; // silently drop duplicate
 
     const db = getDb();
     const chatServer = getChatServer();
     const id = crypto.randomUUID();
 
     db.prepare(
-      `INSERT INTO word_proposals (id, user_id, username, word, action, description, base, closes_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+${VOTE_WINDOW_MINUTES} minutes'))`,
-    ).run(id, userId, username, word, action, description, base);
+      `INSERT INTO word_proposals (id, user_id, username, word, action, description, base, closes_at, held_for_cooldown, size)
+       VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+${VOTE_WINDOW_MINUTES} minutes'), ?, ?)`,
+    ).run(id, userId, username, word, action, description, base, held ? 1 : 0, size);
 
-    // Post magic-string chat message — broadcasts via chatServer's existing event system.
-    // The client renders "PROPOSAL:<uuid>" entries differently in the chat timeline.
-    chatServer.addMessage(userId, username, `PROPOSAL:${id}`, size);
+    this.proposedWords.set(word, Date.now());
+    this.emit("proposed_words_update", { words: this.getProposedWords() });
+
+    if (!held) {
+      // Post magic-string chat message — broadcasts via chatServer's existing event system.
+      // The client renders "PROPOSAL:<uuid>" entries differently in the chat timeline.
+      chatServer.addMessage(userId, username, `PROPOSAL:${id}`, size);
+    }
 
     const proposals = this.buildProposalMap();
     this.emit("proposals_update", { proposals });
     return proposals[id] ?? null;
+  }
+
+  /** Release all held proposals for a given size into the chat (called on cooldown start). */
+  releaseHeld(size: number): void {
+    const db = getDb();
+    const chatServer = getChatServer();
+
+    const held = db.prepare(
+      `SELECT id, user_id, username FROM word_proposals WHERE held_for_cooldown = 1 AND size = ?`,
+    ).all(size) as { id: string; user_id: number; username: string }[];
+
+    if (held.length === 0) return;
+
+    const markReleased = db.prepare(
+      `UPDATE word_proposals SET held_for_cooldown = 0 WHERE id = ?`,
+    );
+
+    for (const row of held) {
+      markReleased.run(row.id);
+      chatServer.addMessage(row.user_id, row.username, `PROPOSAL:${row.id}`, size);
+    }
+
+    const proposals = this.buildProposalMap();
+    this.emit("proposals_update", { proposals });
   }
 
   vote(
@@ -180,6 +248,7 @@ export class WordProposalServer extends EventEmitter {
       }
 
       updateStatus.run(status, row.id);
+      this.proposedWords.delete(row.word.toLowerCase());
 
       if (status !== "rejected") {
         // TODO: submit to Spielwoerter.de partner API
@@ -216,6 +285,7 @@ export class WordProposalServer extends EventEmitter {
       if (changed) {
         const proposals = this.buildProposalMap();
         this.emit("proposals_update", { proposals });
+        this.emit("proposed_words_update", { words: this.getProposedWords() });
         console.log(`[WordProposalServer] Finalized expired proposals, broadcasting update`);
       }
     }, SWEEP_INTERVAL_MS);

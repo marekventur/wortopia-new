@@ -123,17 +123,19 @@ const SCHEMA = `
     ON round_guesses (round_id, size, user_id);
 
   CREATE TABLE IF NOT EXISTS word_proposals (
-    id          TEXT    PRIMARY KEY,
-    user_id     INTEGER NOT NULL,
-    username    TEXT    NOT NULL,
-    word        TEXT    NOT NULL COLLATE NOCASE,
-    action      TEXT    NOT NULL CHECK (action IN ('update', 'remove')),
-    description TEXT,
-    base        TEXT,
-    status      TEXT    NOT NULL DEFAULT 'open'
-                CHECK (status IN ('open', 'approved', 'rejected', 'sent_for_approval')),
-    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    closes_at   TEXT    NOT NULL
+    id                TEXT    PRIMARY KEY,
+    user_id           INTEGER NOT NULL,
+    username          TEXT    NOT NULL,
+    word              TEXT    NOT NULL COLLATE NOCASE,
+    action            TEXT    NOT NULL CHECK (action IN ('add', 'update', 'remove')),
+    description       TEXT,
+    base              TEXT,
+    status            TEXT    NOT NULL DEFAULT 'open'
+                      CHECK (status IN ('open', 'approved', 'rejected', 'sent_for_approval')),
+    created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    closes_at         TEXT    NOT NULL,
+    held_for_cooldown INTEGER NOT NULL DEFAULT 0,
+    size              INTEGER NOT NULL DEFAULT 4
   );
 
   CREATE INDEX IF NOT EXISTS word_proposals_created
@@ -147,6 +149,39 @@ const SCHEMA = `
   );
 `;
 
+function migrateWordProposals(db: Database.Database): void {
+  const cols = (db.prepare("PRAGMA table_info(word_proposals)").all() as { name: string }[]).map(c => c.name);
+
+  // If the table was created before the 'add' action and held-proposal columns existed,
+  // recreate it. The table is ephemeral (30-min vote window) so data loss is acceptable.
+  if (!cols.includes("held_for_cooldown")) {
+    db.exec(`
+      CREATE TABLE word_proposals_new (
+        id                TEXT    PRIMARY KEY,
+        user_id           INTEGER NOT NULL,
+        username          TEXT    NOT NULL,
+        word              TEXT    NOT NULL COLLATE NOCASE,
+        action            TEXT    NOT NULL CHECK (action IN ('add', 'update', 'remove')),
+        description       TEXT,
+        base              TEXT,
+        status            TEXT    NOT NULL DEFAULT 'open'
+                          CHECK (status IN ('open', 'approved', 'rejected', 'sent_for_approval')),
+        created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        closes_at         TEXT    NOT NULL,
+        held_for_cooldown INTEGER NOT NULL DEFAULT 0,
+        size              INTEGER NOT NULL DEFAULT 4
+      );
+      INSERT INTO word_proposals_new (id, user_id, username, word, action, description, base, status, created_at, closes_at)
+        SELECT id, user_id, username, word, action, description, base, status, created_at, closes_at
+        FROM word_proposals
+        WHERE action IN ('update', 'remove');
+      DROP TABLE word_proposals;
+      ALTER TABLE word_proposals_new RENAME TO word_proposals;
+      CREATE INDEX IF NOT EXISTS word_proposals_created ON word_proposals (created_at);
+    `);
+  }
+}
+
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
@@ -156,6 +191,7 @@ export function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
+    migrateWordProposals(db);
   }
   return db;
 }

@@ -50,6 +50,18 @@ type GameStore = {
   hoveredWordGuessedBy: number[] | null;
   setHoveredWordGuessedBy: (ids: number[] | null) => void;
 
+  /** Words that currently have an open proposal — action buttons are disabled for these. */
+  proposedWords: Set<string>;
+  setProposedWords: (words: string[]) => void;
+
+  /** Tracks which usePinnableTooltip instance is currently pinned (for cross-component exclusivity). */
+  pinnedTooltipId: number | null;
+  setPinnedTooltipId: (id: number | null) => void;
+
+  /** LLM-generated description/base returned by the server for a word enrich request. */
+  enrichResult: { word: string; description: string | null; base: string | null } | null;
+  setEnrichResult: (r: { word: string; description: string | null; base: string | null } | null) => void;
+
   // ── Public ──────────────────────────────────────────────────────────────────
   guess: (word: string) => void;
 };
@@ -74,6 +86,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setHoveredUserId: (hoveredUserId) => set({ hoveredUserId }),
   hoveredWordGuessedBy: null,
   setHoveredWordGuessedBy: (hoveredWordGuessedBy) => set({ hoveredWordGuessedBy }),
+
+  proposedWords: new Set<string>(),
+  setProposedWords: (words) => set({ proposedWords: new Set(words) }),
+
+  pinnedTooltipId: null,
+  setPinnedTooltipId: (pinnedTooltipId) => set({ pinnedTooltipId }),
+
+  enrichResult: null,
+  setEnrichResult: (enrichResult) => set({ enrichResult }),
 
   _send: null,
   _setSend: (fn) => set({ _send: fn }),
