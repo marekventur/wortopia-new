@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { Link, useSubmit } from "react-router";
+import { Settings } from "lucide-react";
 import type { Session } from "../../lib/session.js";
 import type { GameSize } from "../stores/gameStore";
+import { useModalStore } from "../stores/modalStore";
+import SettingsModal from "./modals/SettingsModal";
 
 type Props = {
   session: Session;
@@ -13,6 +16,7 @@ const dropdownLinkStyle: CSSProperties ={ display: "block", padding: "3px 20px",
 
 export default function Nav({ session, size, initialPlayerCounts }: Props) {
   const submit = useSubmit();
+  const { openModal } = useModalStore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const dropdownRef = useRef<HTMLLIElement>(null);
@@ -59,6 +63,19 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
         <div className={`navbar-collapse${navOpen ? '' : ' collapse'}`}>
           {/* Desktop: user dropdown floated right */}
           <ul className="nav navbar-nav navbar-right hidden-xs">
+            {session.type === "user" && (
+              <li>
+                <button
+                  type="button"
+                  className="btn btn-link navbar-btn"
+                  style={{ padding: "13px 8px", color: "rgba(255,255,255,0.75)" }}
+                  onClick={() => openModal("settings")}
+                  title="Einstellungen"
+                >
+                  <Settings size={16} />
+                </button>
+              </li>
+            )}
             {session.type === "user" ? (
               <li ref={dropdownRef} className={`dropdown${dropdownOpen ? " open" : ""}`}>
                 <a
@@ -99,6 +116,7 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
             {session.type === "user" ? (
               <>
                 <li className="visible-xs-block"><a href="/account">Account</a></li>
+                <li className="visible-xs-block"><a href="#" onClick={(e) => { e.preventDefault(); openModal("settings"); }}>Einstellungen</a></li>
                 <li className="visible-xs-block"><a href="#" onClick={(e) => { e.preventDefault(); submit(null, { method: "post", action: "/api/logout" }); }}>Logout</a></li>
               </>
             ) : (
@@ -107,6 +125,7 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
           </ul>
         </div>
       </div>
+      {session.type === "user" && <SettingsModal user={session.user} />}
     </div>
   );
 }

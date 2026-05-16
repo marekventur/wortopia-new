@@ -147,6 +147,12 @@ const SCHEMA = `
     vote        TEXT    NOT NULL CHECK (vote IN ('support', 'oppose')),
     PRIMARY KEY (proposal_id, user_id)
   );
+
+  CREATE TABLE IF NOT EXISTS user_settings (
+    user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    show_rotate    INTEGER NOT NULL DEFAULT 1,
+    word_list_sort TEXT    NOT NULL DEFAULT 'default'
+  );
 `;
 
 function migrateWordProposals(db: Database.Database): void {

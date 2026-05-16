@@ -12,5 +12,6 @@ export default [
   route("api/auth/register", "routes/api.auth.register.ts"),
   route("api/logout", "routes/api.logout.ts"),
   route("api/account", "routes/api.account.ts"),
+  route("api/settings", "routes/api.settings.ts"),
   route("api/player-counts", "routes/api.player-counts.ts"),
 ] satisfies RouteConfig;

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { fieldContains, fieldToGrid, type Cell } from '../../lib/fieldContains.js';
 import { useGameStore } from '../stores/gameStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const DIMENSION = 280;
 
@@ -13,6 +14,7 @@ function formatTime(seconds: number): string {
 
 export default function CurrentField() {
   const { size, currentRound, lastGuessResult, guess, connected } = useGameStore();
+  const showRotate = useSettingsStore((s) => s.showRotate);
 
   const field: string[][] = useMemo(() => {
     if (!currentRound?.field) return [];
@@ -427,15 +429,17 @@ export default function CurrentField() {
               )}
             </label>
           </div>
-          <button
-            type="button"
-            className="btn btn-default btn-sm"
-            onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
-            title="Feld drehen (oder 'r' eingeben)"
-            style={{ padding: '0px 7px', height: '30px', marginLeft: 4, flexShrink: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <RotateCcw size={13} />
-          </button>
+          {showRotate && (
+            <button
+              type="button"
+              className="btn btn-default btn-sm"
+              onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
+              title="Feld drehen (oder 'r' eingeben)"
+              style={{ padding: '0px 7px', height: '30px', marginLeft: 4, flexShrink: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <RotateCcw size={13} />
+            </button>
+          )}
         </form>
       </div>
     </div>

@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useGameStore } from "../stores/gameStore.js";
 import { usePinnableTooltip } from "../hooks/usePinnableTooltip.js";
 import { sendProposal } from "../hooks/sendProposal.js";
 import { fieldToGrid, fieldContains, type Cell } from "../../lib/fieldContains.js";
 import type { WordDetail } from "lib/gameTypes.js";
+import { useSettingsStore } from "../stores/settingsStore.js";
 
 export default function LastField() {
   const lastRound = useGameStore((s) => s.lastRound);
   const myUserId = useGameStore((s) => s.myUserId);
   const hoveredUserId = useGameStore((s) => s.hoveredUserId);
   const setHoveredWordGuessedBy = useGameStore((s) => s.setHoveredWordGuessedBy);
+  const wordListSort = useSettingsStore((s) => s.wordListSort);
 
   const [hoveredChain, setHoveredChain] = useState<Cell[] | null>(null);
   const { tooltipPinned, isLoggedIn, proposedWords,
@@ -20,9 +22,19 @@ export default function LastField() {
 
   const size = lastRound.size;
   const grid = fieldToGrid(lastRound.field, size);
-  const { words } = lastRound.results;
-  const totalWords = words.length;
-  const totalPoints = words.reduce((sum, w) => sum + w.points, 0);
+  const { words: rawWords } = lastRound.results;
+  const totalWords = rawWords.length;
+  const totalPoints = rawWords.reduce((sum, w) => sum + w.points, 0);
+
+  const words = useMemo(() => {
+    const sorted = [...rawWords];
+    if (wordListSort === "alpha") {
+      sorted.sort((a, b) => a.word.localeCompare(b.word, "de"));
+    } else if (wordListSort === "points") {
+      sorted.sort((a, b) => b.points - a.points);
+    }
+    return sorted;
+  }, [rawWords, wordListSort]);
 
   const chainIndexMap = new Map<string, number>();
   if (hoveredChain) {

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useGameStore, type GameSize } from "../stores/gameStore";
 import { useChatStore } from "../stores/chatStore";
 import { useProposalStore } from "../stores/proposalStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import type { WsIncomingMsg, WsEnrichResultMsg } from "../../lib/gameTypes.js";
 import type { Session } from "../../lib/session.js";
 
@@ -31,6 +32,14 @@ export default function GameProvider({ session, size, children }: Props) {
     setMyUsername(username);
     setMyUserId(userId);
   }, [username]);
+
+  useEffect(() => {
+    if (session.type !== "user") return;
+    fetch("/api/settings")
+      .then((res) => res.ok ? res.json() : null)
+      .then((json) => { if (json) useSettingsStore.getState().setSettings(json); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setSize(size);
