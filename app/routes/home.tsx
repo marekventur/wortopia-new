@@ -71,7 +71,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
         <div className="col-md-3">
           <div><GameMessages /></div>
-          <div><Guesses /></div>
+          {!isCooldown && <div><Guesses /></div>}
           <div><LastField /></div>
         </div>
       </div>
