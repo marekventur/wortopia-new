@@ -423,6 +423,10 @@ export default function CurrentField() {
               onChange={e => handleTypeWord(e.target.value)}
               disabled={isCooldown}
               placeholder={isCooldown ? 'Pause…' : ''}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
             />
             <label htmlFor="word-input">
               {isCooldown ? (

@@ -33,3 +33,6 @@ Thumbs.db
 
 # PM2
 .pm2/
+
+# Local notes
+todo.md
