@@ -25,7 +25,14 @@ const statusTextClass: Record<string, string> = {
 
 export default function Guesses() {
   const myGuesses = useGameStore((s) => s.myGuesses);
+  const lastRound = useGameStore((s) => s.lastRound);
   const totalPoints = myGuesses.reduce((sum, g) => sum + (g.result === 'correct' ? g.points : 0), 0);
+  const maxPoints = lastRound
+    ? lastRound.results.words.reduce((sum, w) => sum + w.points, 0)
+    : 0;
+  const percentageStr = lastRound && maxPoints > 0
+    ? ` (${Math.round(100 * totalPoints / maxPoints)}%)`
+    : '';
 
   const { tooltipPinned, isLoggedIn, proposedWords, enrichingWord,
           handleMouseEnter, handleMouseLeave, handleClick, requestEnrich, renderTooltip } =
@@ -36,7 +43,7 @@ export default function Guesses() {
   return (
     <div className="guesses">
       <div className="panel panel-default">
-        <div className="panel-heading">{totalPoints} Punkte</div>
+        <div className="panel-heading">{totalPoints} Punkte{percentageStr}</div>
         <table className="table table-condensed">
           <tbody>
             {myGuesses.map((guess, i) => (
