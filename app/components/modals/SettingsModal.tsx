@@ -17,7 +17,7 @@ async function patchSettings(patch: Record<string, unknown>): Promise<void> {
 
 export default function SettingsModal({ user }: Props) {
   const { closeModal } = useModalStore();
-  const { showRotate, wordListSort, setSettings } = useSettingsStore();
+  const { showRotate, wordListSort, highContrast, setSettings } = useSettingsStore();
 
   if (!user) return null;
 
@@ -29,6 +29,11 @@ export default function SettingsModal({ user }: Props) {
   const handleWordListSortChange = async (value: WordListSort) => {
     setSettings({ wordListSort: value });
     await patchSettings({ wordListSort: value });
+  };
+
+  const handleHighContrastChange = async (checked: boolean) => {
+    setSettings({ highContrast: checked });
+    await patchSettings({ highContrast: checked });
   };
 
   return (
@@ -62,6 +67,18 @@ export default function SettingsModal({ user }: Props) {
               <option value="alpha">Alphabetisch</option>
               <option value="points">Punkte</option>
             </select>
+          </div>
+          <div className="form-group">
+            <div className="checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={highContrast}
+                  onChange={(e) => handleHighContrastChange(e.target.checked)}
+                />
+                {" "}Hoher Kontrast
+              </label>
+            </div>
           </div>
         </div>
         <div className="modal-footer">

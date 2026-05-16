@@ -151,7 +151,8 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS user_settings (
     user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     show_rotate    INTEGER NOT NULL DEFAULT 1,
-    word_list_sort TEXT    NOT NULL DEFAULT 'default'
+    word_list_sort TEXT    NOT NULL DEFAULT 'default',
+    high_contrast  INTEGER NOT NULL DEFAULT 0
   );
 `;
 
@@ -188,6 +189,12 @@ function migrateWordProposals(db: Database.Database): void {
   }
 }
 
+function migrateUserSettings(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE user_settings ADD COLUMN high_contrast INTEGER NOT NULL DEFAULT 0").run();
+  } catch {}
+}
+
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
@@ -198,6 +205,7 @@ export function getDb(): Database.Database {
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
     migrateWordProposals(db);
+    migrateUserSettings(db);
   }
   return db;
 }

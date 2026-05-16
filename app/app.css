@@ -458,3 +458,13 @@ body {
   color: #8a6d3b;
   border-color: #8a6d3b;
 }
+
+/* High contrast mode */
+.high-contrast .field-style--default td {
+  border: 2px solid #000;
+  color: #000;
+  background: #fff;
+}
+.high-contrast .guesses tr.success { background: #c8ffc8; color: #000; }
+.high-contrast .guesses tr.danger  { background: #ffc8c8; color: #000; }
+.high-contrast .panel-heading { background: #000; color: #fff; }

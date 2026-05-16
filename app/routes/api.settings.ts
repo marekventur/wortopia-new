@@ -10,10 +10,11 @@ const VALID_SORTS: WordListSort[] = ["default", "alpha", "points"];
 type SettingsRow = {
   show_rotate: number;
   word_list_sort: string;
+  high_contrast: number;
 };
 
 function getDefaultSettings() {
-  return { showRotate: true, wordListSort: "default" as WordListSort };
+  return { showRotate: true, wordListSort: "default" as WordListSort, highContrast: false };
 }
 
 function rowToSettings(row: SettingsRow) {
@@ -22,6 +23,7 @@ function rowToSettings(row: SettingsRow) {
     wordListSort: (VALID_SORTS.includes(row.word_list_sort as WordListSort)
       ? row.word_list_sort
       : "default") as WordListSort,
+    highContrast: row.high_contrast !== 0,
   };
 }
 
@@ -33,7 +35,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const db = getDb();
   const row = db
-    .prepare("SELECT show_rotate, word_list_sort FROM user_settings WHERE user_id = ?")
+    .prepare("SELECT show_rotate, word_list_sort, high_contrast FROM user_settings WHERE user_id = ?")
     .get(user.id) as SettingsRow | undefined;
 
   return data(row ? rowToSettings(row) : getDefaultSettings());
@@ -62,6 +64,7 @@ export async function action({ request }: Route.ActionArgs) {
   // Validate and apply partial update
   let showRotate = current.showRotate;
   let wordListSort = current.wordListSort;
+  let highContrast = current.highContrast;
 
   if ("showRotate" in body) {
     showRotate = Boolean(body.showRotate);
@@ -73,14 +76,18 @@ export async function action({ request }: Route.ActionArgs) {
     }
     wordListSort = val as WordListSort;
   }
+  if ("highContrast" in body) {
+    highContrast = Boolean(body.highContrast);
+  }
 
   db.prepare(
-    `INSERT INTO user_settings (user_id, show_rotate, word_list_sort)
-     VALUES (?, ?, ?)
+    `INSERT INTO user_settings (user_id, show_rotate, word_list_sort, high_contrast)
+     VALUES (?, ?, ?, ?)
      ON CONFLICT (user_id) DO UPDATE SET
        show_rotate    = excluded.show_rotate,
-       word_list_sort = excluded.word_list_sort`,
-  ).run(user.id, showRotate ? 1 : 0, wordListSort);
+       word_list_sort = excluded.word_list_sort,
+       high_contrast  = excluded.high_contrast`,
+  ).run(user.id, showRotate ? 1 : 0, wordListSort, highContrast ? 1 : 0);
 
-  return data({ showRotate, wordListSort });
+  return data({ showRotate, wordListSort, highContrast });
 }

@@ -6,10 +6,12 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+import { useEffect } from "react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
 import "react-tooltip/dist/react-tooltip.css";
+import { useSettingsStore } from "./stores/settingsStore";
 
 export const links: Route.LinksFunction = () => [
   {
@@ -27,6 +29,12 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const highContrast = useSettingsStore((s) => s.highContrast);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("high-contrast", highContrast);
+  }, [highContrast]);
+
   return (
     <html lang="de">
       <head>
