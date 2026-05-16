@@ -150,38 +150,6 @@ body {
   margin-right: 5px;
 }
 
-.field-style--default .current-field .giant-tick,
-.field-style--default .current-field .giant-cross {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 100%;
-  text-align: center;
-  font-size: 180px;
-  line-height: 1;
-  transform: translateY(-50%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.field-style--default .current-field .giant-tick {
-  color: #5cb85c;
-}
-
-.field-style--default .current-field .giant-cross {
-  color: #d9534f;
-}
-
-.field-style--default .current-field .giant-tick.highlight,
-.field-style--default .current-field .giant-cross.highlight {
-  animation: field-style-default-highlight 0.5s;
-}
-
-@keyframes field-style-default-highlight {
-  0%   { opacity: 0; transform: translateY(-50%) scale(0.85); }
-  40%  { opacity: 0.75; }
-  100% { opacity: 0; transform: translateY(-50%) scale(1.1); }
-}
 
 /* chat.styl */
 

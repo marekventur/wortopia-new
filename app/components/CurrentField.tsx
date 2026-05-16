@@ -42,8 +42,7 @@ export default function CurrentField() {
   const [chain, setChain] = useState<Cell[]>([]);
   const [wordEntered, setWordEntered] = useState('');
   const [wordEnteredClass, setWordEnteredClass] = useState('');
-  const [tickHighlight, setTickHighlight] = useState(false);
-  const [crossHighlight, setCrossHighlight] = useState(false);
+
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useCallback((el: HTMLInputElement | null) => { el?.focus(); }, []);
@@ -51,18 +50,6 @@ export default function CurrentField() {
   const leftButtonDownRef = useRef(false);
   const startSwipingFieldRef = useRef<Cell | null>(null);
   const scaleRef = useRef(1);
-
-  // Animate on guess result
-  useEffect(() => {
-    if (!lastGuessResult) return;
-    if (lastGuessResult.result === 'correct') {
-      setTickHighlight(true);
-      setTimeout(() => setTickHighlight(false), 600);
-    } else if (lastGuessResult.result !== 'cooldown') {
-      setCrossHighlight(true);
-      setTimeout(() => setCrossHighlight(false), 600);
-    }
-  }, [lastGuessResult?.ts]);
 
   // --- Coordinate mapping (display ↔ original) ---
 
@@ -394,9 +381,6 @@ export default function CurrentField() {
               ))}
             </tbody>
           </table>
-
-          <div className={`giant-tick${tickHighlight ? ' highlight' : ''}`}>✓</div>
-          <div className={`giant-cross${crossHighlight ? ' highlight' : ''}`}>✗</div>
 
           <canvas
             ref={canvasRef}
