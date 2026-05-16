@@ -94,6 +94,7 @@ export class WordProposalServer extends EventEmitter {
     base: string | null,
     size: number,
     held = false,
+    reason: string | null = null,
   ): Proposal | null {
     if (userId < 0) return null; // guests cannot propose
     if (this.proposedWords.has(word)) return null; // silently drop duplicate
@@ -101,6 +102,10 @@ export class WordProposalServer extends EventEmitter {
     const db = getDb();
     const chatServer = getChatServer();
     const id = crypto.randomUUID();
+
+    if (action === "remove" && reason) {
+      console.log(`[WordProposalServer] remove proposal for "${word}" by ${username} — reason: ${reason}`);
+    }
 
     db.prepare(
       `INSERT INTO word_proposals (id, user_id, username, word, action, description, base, closes_at, held_for_cooldown, size)

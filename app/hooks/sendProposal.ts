@@ -6,8 +6,9 @@ export function sendProposal(
   word: string,
   description?: string,
   base?: string,
+  reason?: string,
 ): void {
   useGameStore.getState()._send?.(
-    JSON.stringify({ type: "propose_word", action, word: word.toLowerCase(), description, base }),
+    JSON.stringify({ type: "propose_word", action, word: word.toLowerCase(), description, base, reason }),
   );
 }

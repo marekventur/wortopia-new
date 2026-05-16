@@ -13,7 +13,7 @@ const SPIELWOERTER_ENRICH_URL = "https://spielwoerter.de/api/partner/enrich";
 type IncomingFrame =
   | { type: "guess"; word: string }
   | { type: "chat_message"; message: string }
-  | { type: "propose_word"; action: "add" | "update" | "remove"; word: string; description?: string; base?: string }
+  | { type: "propose_word"; action: "add" | "update" | "remove"; word: string; description?: string; base?: string; reason?: string }
   | { type: "vote_for_proposal"; id: string; vote: "support" | "oppose" | null }
   | { type: "enrich_word"; word: string };
 
@@ -185,6 +185,7 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
               frame.base ?? null,
               size,
               held,
+              frame.reason ?? null,
             );
           } catch (err) {
             console.error("[GameWsServer] propose_word failed:", err);

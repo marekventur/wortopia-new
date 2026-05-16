@@ -14,6 +14,8 @@ export type Proposal = {
   description: string | null;
   /** Base/lemma form — optional even for "update". */
   base: string | null;
+  /** Optional free-text reason; used for "remove" proposals. */
+  reason?: string;
   proposer: number;
   proposerUsername: string;
   supporterCount: number;

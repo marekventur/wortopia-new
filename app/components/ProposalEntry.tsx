@@ -73,6 +73,9 @@ export default function ProposalEntry({ proposal, session }: Props) {
       {proposal.description && (
         <div className="proposal-entry__description">{proposal.description}</div>
       )}
+      {proposal.action === "remove" && proposal.reason && (
+        <div className="proposal-entry__reason">{proposal.reason}</div>
+      )}
       </div>
       {proposal.status === "open" && (
       <div className="proposal-entry__votes">
