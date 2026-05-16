@@ -90,6 +90,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 const DAY_OPTIONS = [
+  { label: "24 Stunden", value: 1 },
   { label: "7 Tage", value: 7 },
   { label: "30 Tage", value: 30 },
   { label: "90 Tage", value: 90 },

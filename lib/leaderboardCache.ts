@@ -1,11 +1,12 @@
 import { getDb } from "./db.js";
 
-const DAY_OPTIONS = [7, 30, 90, 365, 0] as const;
+const DAY_OPTIONS = [1, 7, 30, 90, 365, 0] as const;
 const SIZE_OPTIONS = [0, 4, 5] as const;
 
 // Minimum games to appear in leaderboard: ~0.5 games/day on average.
 // days=0 (all-time) shares the 1-year threshold.
 const MIN_GAMES: Record<number, number> = {
+  1:   1,
   7:   3,
   30:  15,
   90:  45,
