@@ -142,6 +142,13 @@ export default function CurrentField() {
       setWordEnteredClass('');
       updateChain([]);
       drawChain([]);
+      // On touch devices, blur the active element so the virtual keyboard
+      // doesn't pop back up after every word submission.
+      if (window.matchMedia('(pointer: coarse)').matches) {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+      }
     },
     [guess, updateChain, drawChain],
   );
