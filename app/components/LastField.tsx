@@ -20,14 +20,7 @@ export default function LastField() {
           handleMouseEnter, handleMouseLeave, handleClick, close, renderTooltip } =
     usePinnableTooltip<WordDetail>();
 
-  if (!lastRound) return null;
-
-  const size = lastRound.size;
-  const grid = fieldToGrid(lastRound.field, size);
-  const { words: rawWords } = lastRound.results;
-  const totalWords = rawWords.length;
-  const totalPoints = rawWords.reduce((sum, w) => sum + w.points, 0);
-
+  const rawWords = lastRound?.results.words ?? [];
   const words = useMemo(() => {
     const sorted = [...rawWords];
     if (wordListSort === "alpha") {
@@ -37,6 +30,13 @@ export default function LastField() {
     }
     return sorted;
   }, [rawWords, wordListSort]);
+
+  if (!lastRound) return null;
+
+  const size = lastRound.size;
+  const grid = fieldToGrid(lastRound.field, size);
+  const totalWords = rawWords.length;
+  const totalPoints = rawWords.reduce((sum, w) => sum + w.points, 0);
 
   const chainIndexMap = new Map<string, number>();
   if (hoveredChain) {
