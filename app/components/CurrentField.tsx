@@ -442,13 +442,26 @@ export default function CurrentField() {
           )}
         </form>
 
-        <h2 className="pause-timer visible-xs-block visible-sm-block hidden-md hidden-lg">
-          {isCooldown ? (
-            <span className="text-muted">{formatTime(secondsRemaining)}</span>
-          ) : (
-            formatTime(secondsRemaining)
+        <div className="hidden-md hidden-lg pause-timer-row">
+          <h2 className="pause-timer" style={{ margin: '10px 0 20px' }}>
+            {isCooldown ? (
+              <span className="text-muted">{formatTime(secondsRemaining)}</span>
+            ) : (
+              formatTime(secondsRemaining)
+            )}
+          </h2>
+          {showRotate && (
+            <button
+              type="button"
+              className="btn btn-default btn-sm"
+              onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
+              title="Feld drehen"
+              style={{ marginLeft: 10, border: 'none', background: 'transparent' }}
+            >
+              <RotateCcw size={16} />
+            </button>
           )}
-        </h2>
+        </div>
       </div>
     </div>
   );
