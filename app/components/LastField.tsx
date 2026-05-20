@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useGameStore } from "../stores/gameStore.js";
 import { usePinnableTooltip } from "../hooks/usePinnableTooltip.js";
 import { sendProposal } from "../hooks/sendProposal.js";
@@ -14,18 +14,9 @@ export default function LastField() {
   const wordListSort = useSettingsStore((s) => s.wordListSort);
 
   const [hoveredChain, setHoveredChain] = useState<Cell[] | null>(null);
-  const [removeReason, setRemoveReason] = useState("");
-  const [removeMode, setRemoveMode] = useState(false);
-  const { tooltipWord, tooltipPinned, isLoggedIn, proposedWords,
+  const { tooltipPinned, isLoggedIn, proposedWords,
           handleMouseEnter, handleMouseLeave, handleClick, close, renderTooltip } =
     usePinnableTooltip<WordDetail>();
-
-  useEffect(() => {
-    if (!tooltipWord) {
-      setRemoveMode(false);
-      setRemoveReason("");
-    }
-  }, [tooltipWord]);
 
   const rawWords = lastRound?.results.words ?? [];
   const words = useMemo(() => {
@@ -62,11 +53,6 @@ export default function LastField() {
     handleMouseLeave();
   };
 
-  const handleCloseTooltip = () => {
-    setRemoveMode(false);
-    setRemoveReason("");
-    close();
-  };
 
   return (
     <div>
@@ -136,7 +122,7 @@ export default function LastField() {
                       `Beschreibung für ${word.word.toUpperCase()} bearbeiten:`,
                       word.description ?? "",
                     );
-                    if (desc !== null) { sendProposal("update", word.word, desc); handleCloseTooltip(); }
+                    if (desc !== null) { sendProposal("update", word.word, desc); close(); }
                   }}
                 >
                   <span className="glyphicon glyphicon-pencil"></span>
@@ -149,47 +135,22 @@ export default function LastField() {
                       const desc = window.prompt(
                         `Beschreibung für ${word.word.toUpperCase()} hinzufügen:`,
                       );
-                      if (desc !== null) { sendProposal("update", word.word, desc); handleCloseTooltip(); }
+                      if (desc !== null) { sendProposal("update", word.word, desc); close(); }
                     }}
                   >
                     Beschreibung hinzufügen <span className="glyphicon glyphicon-pencil"></span>
                   </button>
                 : null}
-            {tooltipPinned && isLoggedIn && !proposedWords.has(word.word.toLowerCase()) && !removeMode && (
+            {tooltipPinned && isLoggedIn && !proposedWords.has(word.word.toLowerCase()) && (
               <button
                 className="word-tooltip-delete-button"
-                onClick={() => setRemoveMode(true)}
+                onClick={() => {
+                  const reason = window.prompt(`"${word.word.toUpperCase()}" entfernen vorschlagen – Begründung (optional):`);
+                  if (reason !== null) { sendProposal("remove", word.word, undefined, undefined, reason || undefined); close(); }
+                }}
               >
                 <span className="glyphicon glyphicon-trash"></span>
               </button>
-            )}
-            {tooltipPinned && isLoggedIn && removeMode && (
-              <div style={{ marginTop: 6 }}>
-                <textarea
-                  rows={2}
-                  placeholder="Begründung (optional)"
-                  value={removeReason}
-                  onChange={(e) => setRemoveReason(e.target.value)}
-                  style={{ width: "100%", fontSize: 12, resize: "vertical", color: "#000" }}
-                />
-                <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                  <button
-                    className="btn btn-danger btn-xs"
-                    onClick={() => {
-                      sendProposal("remove", word.word, undefined, undefined, removeReason || undefined);
-                      handleCloseTooltip();
-                    }}
-                  >
-                    Entfernen vorschlagen
-                  </button>
-                  <button
-                    className="btn btn-default btn-xs"
-                    onClick={() => { setRemoveMode(false); setRemoveReason(""); }}
-                  >
-                    Abbrechen
-                  </button>
-                </div>
-              </div>
             )}
           </div>
         </>
