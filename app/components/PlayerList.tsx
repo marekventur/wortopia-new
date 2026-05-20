@@ -28,12 +28,10 @@ export default function PlayerList() {
           >
             <span className="badge">
               {player.points}
+              {isCooldown && maxPoints > 0 && (
+                <small> ({Math.round(100 * player.points / maxPoints)}%)</small>
+              )}
             </span>
-            {isCooldown && lastRound && maxPoints > 0 && (
-              <span className="text-muted" style={{ marginLeft: 4, fontSize: "0.85em" }}>
-                ({Math.round(100 * player.points / maxPoints)}%)
-              </span>
-            )}
             {player.username === myUsername ? <strong>{player.username}</strong> : player.username}
             {player.team && (
               <span className="label label-default" style={{ marginLeft: 6, fontSize: "0.8em", fontWeight: "normal" }}>
