@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useGameStore } from "../stores/gameStore.js";
 import { usePinnableTooltip } from "../hooks/usePinnableTooltip.js";
 import { sendProposal } from "../hooks/sendProposal.js";
@@ -16,9 +16,16 @@ export default function LastField() {
   const [hoveredChain, setHoveredChain] = useState<Cell[] | null>(null);
   const [removeReason, setRemoveReason] = useState("");
   const [removeMode, setRemoveMode] = useState(false);
-  const { tooltipPinned, isLoggedIn, proposedWords,
+  const { tooltipWord, tooltipPinned, isLoggedIn, proposedWords,
           handleMouseEnter, handleMouseLeave, handleClick, close, renderTooltip } =
     usePinnableTooltip<WordDetail>();
+
+  useEffect(() => {
+    if (!tooltipWord) {
+      setRemoveMode(false);
+      setRemoveReason("");
+    }
+  }, [tooltipWord]);
 
   const rawWords = lastRound?.results.words ?? [];
   const words = useMemo(() => {
@@ -44,17 +51,9 @@ export default function LastField() {
   }
 
   const onMouseEnter = (i: number, word: WordDetail, guessedBy: number[]) => {
-    setRemoveMode(false);
-    setRemoveReason("");
     setHoveredWordGuessedBy(guessedBy);
     setHoveredChain(fieldContains(grid, word.word));
     handleMouseEnter(`lrw-${i}`, word);
-  };
-
-  const onWordClick = (anchorId: string, word: WordDetail) => {
-    setRemoveMode(false);
-    setRemoveReason("");
-    handleClick(anchorId, word);
   };
 
   const onMouseLeave = () => {
@@ -114,7 +113,7 @@ export default function LastField() {
                   onMouseEnter={() => onMouseEnter(i, word, guessedBy)}
                   onMouseLeave={onMouseLeave}
                   style={{ cursor: isLoggedIn ? 'pointer' : 'default' }}
-                  onClick={() => onWordClick(`lrw-${i}`, word)}
+                  onClick={() => handleClick(`lrw-${i}`, word)}
                 >
                   {word.word.toUpperCase()}
                 </span>{' '}
