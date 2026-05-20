@@ -441,6 +441,14 @@ export default function CurrentField() {
             </button>
           )}
         </form>
+
+        <h2 className="pause-timer visible-xs-block visible-sm-block hidden-md hidden-lg">
+          {isCooldown ? (
+            <span className="text-muted">{formatTime(secondsRemaining)}</span>
+          ) : (
+            formatTime(secondsRemaining)
+          )}
+        </h2>
       </div>
     </div>
   );
