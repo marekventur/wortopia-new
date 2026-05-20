@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { Link, useSubmit } from "react-router";
-import { Settings } from "lucide-react";
 import type { Session } from "../../lib/session.js";
 import type { GameSize } from "../stores/gameStore";
 import { useModalStore } from "../stores/modalStore";
@@ -63,19 +62,6 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
         <div className={`navbar-collapse${navOpen ? '' : ' collapse'}`}>
           {/* Desktop: user dropdown floated right */}
           <ul className="nav navbar-nav navbar-right hidden-xs">
-            {session.type === "user" && (
-              <li>
-                <button
-                  type="button"
-                  className="btn btn-link navbar-btn"
-                  style={{ padding: "13px 8px", color: "rgba(255,255,255,0.75)" }}
-                  onClick={() => openModal("settings")}
-                  title="Einstellungen"
-                >
-                  <Settings size={16} />
-                </button>
-              </li>
-            )}
             {session.type === "user" ? (
               <li ref={dropdownRef} className={`dropdown${dropdownOpen ? " open" : ""}`}>
                 <a
@@ -88,6 +74,9 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
                 <ul className="dropdown-menu dropdown-menu-right">
                   <li>
                     <Link to="/account" style={dropdownLinkStyle}>Account</Link>
+                  </li>
+                  <li>
+                    <Link to="#" style={dropdownLinkStyle} onClick={(e) => { e.preventDefault(); setDropdownOpen(false); openModal("settings"); }}>Einstellungen</Link>
                   </li>
                   <li role="separator" className="divider" />
                   <li>
