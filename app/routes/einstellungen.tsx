@@ -38,9 +38,9 @@ export async function action({ request }: Route.ActionArgs) {
   if (session.type !== "user") return redirect("/login");
 
   const form = await request.formData();
-  const showRotate   = form.get("showRotate") === "1";
+  const showRotate   = form.getAll("showRotate").includes("1");
   const wordListSort = form.get("wordListSort") as string;
-  const highContrast = form.get("highContrast") === "1";
+  const highContrast = form.getAll("highContrast").includes("1");
 
   if (!VALID_SORTS.includes(wordListSort as WordListSort)) {
     return redirect("/einstellungen");
