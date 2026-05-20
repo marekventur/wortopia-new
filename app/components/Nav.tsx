@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { Link, useSubmit } from "react-router";
 import type { Session } from "../../lib/session.js";
 import type { GameSize } from "../stores/gameStore";
-import { useModalStore } from "../stores/modalStore";
-import SettingsModal from "./modals/SettingsModal";
 
 type Props = {
   session: Session;
@@ -15,7 +13,6 @@ const dropdownLinkStyle: CSSProperties ={ display: "block", padding: "3px 20px",
 
 export default function Nav({ session, size, initialPlayerCounts }: Props) {
   const submit = useSubmit();
-  const { openModal } = useModalStore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const dropdownRef = useRef<HTMLLIElement>(null);
@@ -76,7 +73,7 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
                     <Link to="/account" style={dropdownLinkStyle}>Account</Link>
                   </li>
                   <li>
-                    <Link to="#" style={dropdownLinkStyle} onClick={(e) => { e.preventDefault(); setDropdownOpen(false); openModal("settings"); }}>Einstellungen</Link>
+                    <Link to="/einstellungen" style={dropdownLinkStyle} onClick={() => setDropdownOpen(false)}>Einstellungen</Link>
                   </li>
                   <li role="separator" className="divider" />
                   <li>
@@ -105,7 +102,7 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
             {session.type === "user" ? (
               <>
                 <li className="visible-xs-block"><a href="/account">Account</a></li>
-                <li className="visible-xs-block"><a href="#" onClick={(e) => { e.preventDefault(); openModal("settings"); }}>Einstellungen</a></li>
+                <li className="visible-xs-block"><a href="/einstellungen">Einstellungen</a></li>
                 <li className="visible-xs-block"><a href="#" onClick={(e) => { e.preventDefault(); submit(null, { method: "post", action: "/api/logout" }); }}>Logout</a></li>
               </>
             ) : (
@@ -114,7 +111,6 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
           </ul>
         </div>
       </div>
-      {session.type === "user" && <SettingsModal user={session.user} />}
     </div>
   );
 }

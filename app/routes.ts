@@ -6,6 +6,7 @@ export default [
   route("rangliste", "routes/rangliste.tsx"),
   route("login", "routes/login.tsx"),
   route("account", "routes/account.tsx"),
+  route("einstellungen", "routes/einstellungen.tsx"),
   route(":size", "routes/home.tsx"),
   route("api/auth/request", "routes/api.auth.request.ts"),
   route("api/auth/verify", "routes/api.auth.verify.ts"),
