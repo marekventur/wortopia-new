@@ -7,14 +7,17 @@ type WordListSort = "default" | "alpha" | "points";
 
 const VALID_SORTS: WordListSort[] = ["default", "alpha", "points"];
 
+const VALID_SCALES = [75, 90, 100, 115, 125, 150];
+
 type SettingsRow = {
   show_rotate: number;
   word_list_sort: string;
   high_contrast: number;
+  board_scale: number;
 };
 
 function getDefaultSettings() {
-  return { showRotate: true, wordListSort: "default" as WordListSort, highContrast: false };
+  return { showRotate: true, wordListSort: "default" as WordListSort, highContrast: false, boardScale: 100 };
 }
 
 function rowToSettings(row: SettingsRow) {
@@ -24,6 +27,7 @@ function rowToSettings(row: SettingsRow) {
       ? row.word_list_sort
       : "default") as WordListSort,
     highContrast: row.high_contrast !== 0,
+    boardScale: VALID_SCALES.includes(row.board_scale) ? row.board_scale : 100,
   };
 }
 
@@ -35,7 +39,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const db = getDb();
   const row = db
-    .prepare("SELECT show_rotate, word_list_sort, high_contrast FROM user_settings WHERE user_id = ?")
+    .prepare("SELECT show_rotate, word_list_sort, high_contrast, board_scale FROM user_settings WHERE user_id = ?")
     .get(user.id) as SettingsRow | undefined;
 
   return data(row ? rowToSettings(row) : getDefaultSettings());
@@ -56,7 +60,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Read current settings as base
   const existing = db
-    .prepare("SELECT show_rotate, word_list_sort FROM user_settings WHERE user_id = ?")
+    .prepare("SELECT show_rotate, word_list_sort, high_contrast, board_scale FROM user_settings WHERE user_id = ?")
     .get(user.id) as SettingsRow | undefined;
 
   const current = existing ? rowToSettings(existing) : getDefaultSettings();
@@ -65,6 +69,7 @@ export async function action({ request }: Route.ActionArgs) {
   let showRotate = current.showRotate;
   let wordListSort = current.wordListSort;
   let highContrast = current.highContrast;
+  let boardScale = current.boardScale;
 
   if ("showRotate" in body) {
     showRotate = Boolean(body.showRotate);
@@ -79,15 +84,23 @@ export async function action({ request }: Route.ActionArgs) {
   if ("highContrast" in body) {
     highContrast = Boolean(body.highContrast);
   }
+  if ("boardScale" in body) {
+    const val = Number(body.boardScale);
+    if (!VALID_SCALES.includes(val)) {
+      return data({ error: "Ungültige Brettgröße." }, { status: 400 });
+    }
+    boardScale = val;
+  }
 
   db.prepare(
-    `INSERT INTO user_settings (user_id, show_rotate, word_list_sort, high_contrast)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO user_settings (user_id, show_rotate, word_list_sort, high_contrast, board_scale)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (user_id) DO UPDATE SET
        show_rotate    = excluded.show_rotate,
        word_list_sort = excluded.word_list_sort,
-       high_contrast  = excluded.high_contrast`,
-  ).run(user.id, showRotate ? 1 : 0, wordListSort, highContrast ? 1 : 0);
+       high_contrast  = excluded.high_contrast,
+       board_scale    = excluded.board_scale`,
+  ).run(user.id, showRotate ? 1 : 0, wordListSort, highContrast ? 1 : 0, boardScale);
 
-  return data({ showRotate, wordListSort, highContrast });
+  return data({ showRotate, wordListSort, highContrast, boardScale });
 }

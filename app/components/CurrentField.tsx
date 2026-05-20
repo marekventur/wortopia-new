@@ -15,6 +15,8 @@ function formatTime(seconds: number): string {
 export default function CurrentField() {
   const { size, currentRound, lastGuessResult, guess, connected } = useGameStore();
   const showRotate = useSettingsStore((s) => s.showRotate);
+  const boardScale = useSettingsStore((s) => s.boardScale);
+  const cssScale = boardScale / 100;
 
   const field: string[][] = useMemo(() => {
     if (!currentRound?.field) return [];
@@ -52,6 +54,7 @@ export default function CurrentField() {
   const leftButtonDownRef = useRef(false);
   const startSwipingFieldRef = useRef<Cell | null>(null);
   const scaleRef = useRef(1);
+  useEffect(() => { scaleRef.current = cssScale; }, [cssScale]);
 
   // --- Coordinate mapping (display ↔ original) ---
 
@@ -373,7 +376,11 @@ export default function CurrentField() {
   return (
     <div className={`field-style--default size-${size}`}>
       <div className="current-field">
-        <div className="field-container">
+        <div style={{ height: DIMENSION * cssScale, width: 'fit-content' }}>
+        <div
+          className="field-container"
+          style={cssScale !== 1 ? { transform: `scale(${cssScale})`, transformOrigin: '50% 0%' } : undefined}
+        >
           <table className="field">
             <tbody>
               {displayField.map((row, y) => (
@@ -399,6 +406,7 @@ export default function CurrentField() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           />
+        </div>
         </div>
 
         <form

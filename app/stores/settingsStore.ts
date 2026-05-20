@@ -6,6 +6,7 @@ export type Settings = {
   showRotate: boolean;
   wordListSort: WordListSort;
   highContrast: boolean;
+  boardScale: number;
 };
 
 type SettingsStore = Settings & {
@@ -16,5 +17,6 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   showRotate: true,
   wordListSort: "default",
   highContrast: false,
+  boardScale: 100,
   setSettings: (s) => set((prev) => ({ ...prev, ...s })),
 }));
