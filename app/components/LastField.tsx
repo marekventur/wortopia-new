@@ -44,9 +44,17 @@ export default function LastField() {
   }
 
   const onMouseEnter = (i: number, word: WordDetail, guessedBy: number[]) => {
+    setRemoveMode(false);
+    setRemoveReason("");
     setHoveredWordGuessedBy(guessedBy);
     setHoveredChain(fieldContains(grid, word.word));
     handleMouseEnter(`lrw-${i}`, word);
+  };
+
+  const onWordClick = (anchorId: string, word: WordDetail) => {
+    setRemoveMode(false);
+    setRemoveReason("");
+    handleClick(anchorId, word);
   };
 
   const onMouseLeave = () => {
@@ -106,7 +114,7 @@ export default function LastField() {
                   onMouseEnter={() => onMouseEnter(i, word, guessedBy)}
                   onMouseLeave={onMouseLeave}
                   style={{ cursor: isLoggedIn ? 'pointer' : 'default' }}
-                  onClick={() => handleClick(`lrw-${i}`, word)}
+                  onClick={() => onWordClick(`lrw-${i}`, word)}
                 >
                   {word.word.toUpperCase()}
                 </span>{' '}
