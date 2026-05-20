@@ -397,6 +397,11 @@ h2.pause-timer {
   font-style: italic;
 }
 
+.proposal-entry__reason {
+  color: #555;
+  font-style: italic;
+}
+
 .proposal-entry__votes {
   display: flex;
   margin-left: 8px;

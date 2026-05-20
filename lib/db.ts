@@ -135,7 +135,8 @@ const SCHEMA = `
     created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     closes_at         TEXT    NOT NULL,
     held_for_cooldown INTEGER NOT NULL DEFAULT 0,
-    size              INTEGER NOT NULL DEFAULT 4
+    size              INTEGER NOT NULL DEFAULT 4,
+    reason            TEXT
   );
 
   CREATE INDEX IF NOT EXISTS word_proposals_created
@@ -152,7 +153,8 @@ const SCHEMA = `
     user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     show_rotate    INTEGER NOT NULL DEFAULT 1,
     word_list_sort TEXT    NOT NULL DEFAULT 'default',
-    high_contrast  INTEGER NOT NULL DEFAULT 0
+    high_contrast  INTEGER NOT NULL DEFAULT 0,
+    board_scale    INTEGER NOT NULL DEFAULT 100
   );
 `;
 
@@ -195,6 +197,18 @@ function migrateUserSettings(db: Database.Database): void {
   } catch {}
 }
 
+function migrateWordProposalReason(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE word_proposals ADD COLUMN reason TEXT").run();
+  } catch {}
+}
+
+function migrateBoardScale(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE user_settings ADD COLUMN board_scale INTEGER NOT NULL DEFAULT 100").run();
+  } catch {}
+}
+
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
@@ -206,6 +220,8 @@ export function getDb(): Database.Database {
     db.exec(SCHEMA);
     migrateWordProposals(db);
     migrateUserSettings(db);
+    migrateWordProposalReason(db);
+    migrateBoardScale(db);
   }
   return db;
 }

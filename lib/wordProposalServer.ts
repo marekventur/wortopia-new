@@ -18,6 +18,7 @@ type ProposalRow = {
   action: string;
   description: string | null;
   base: string | null;
+  reason: string | null;
   status: string;
   created_at: string;
   closes_at: string;
@@ -32,6 +33,7 @@ function rowToProposal(row: ProposalRow): Proposal {
     action: row.action as ProposalAction,
     description: row.description,
     base: row.base,
+    reason: row.reason ?? undefined,
     proposer: row.user_id,
     proposerUsername: row.username,
     supporterCount: row.supporter_count,
@@ -108,9 +110,9 @@ export class WordProposalServer extends EventEmitter {
     }
 
     db.prepare(
-      `INSERT INTO word_proposals (id, user_id, username, word, action, description, base, closes_at, held_for_cooldown, size)
-       VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+${VOTE_WINDOW_MINUTES} minutes'), ?, ?)`,
-    ).run(id, userId, username, word, action, description, base, held ? 1 : 0, size);
+      `INSERT INTO word_proposals (id, user_id, username, word, action, description, base, closes_at, held_for_cooldown, size, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+${VOTE_WINDOW_MINUTES} minutes'), ?, ?, ?)`,
+    ).run(id, userId, username, word, action, description, base, held ? 1 : 0, size, reason);
 
     this.proposedWords.set(word, Date.now());
     this.emit("proposed_words_update", { words: this.getProposedWords() });
@@ -197,7 +199,7 @@ export class WordProposalServer extends EventEmitter {
     const db = getDb();
     const rows = db
       .prepare(
-        `SELECT p.id, p.user_id, p.username, p.word, p.action, p.description, p.base,
+        `SELECT p.id, p.user_id, p.username, p.word, p.action, p.description, p.base, p.reason,
                 p.status, p.created_at, p.closes_at,
                 COALESCE(SUM(CASE WHEN v.vote = 'support' THEN 1 ELSE 0 END), 0) AS supporter_count,
                 COALESCE(SUM(CASE WHEN v.vote = 'oppose' THEN 1 ELSE 0 END), 0) AS opposer_count
