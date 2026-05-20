@@ -469,6 +469,12 @@ body {
   border-right: 2px solid #000;
   border-bottom: 2px solid #000;
 }
+.high-contrast .field-style--default .current-field table.field td:last-child {
+  border-right: none;
+}
+.high-contrast .field-style--default .current-field table.field tr:last-child td {
+  border-bottom: none;
+}
 .high-contrast .field-style--default .current-field table.field td.cell--selected {
   background-color: #000;
   color: #fff;
