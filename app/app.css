@@ -459,12 +459,17 @@ body {
   border-color: #8a6d3b;
 }
 
-/* High contrast mode */
-.high-contrast .field-style--default td {
-  border: 2px solid #000;
+/* High contrast mode — board only */
+.high-contrast .field-style--default .current-field table.field {
+  background-color: #fff;
   color: #000;
-  background: #fff;
 }
-.high-contrast .guesses tr.success { background: #c8ffc8; color: #000; }
-.high-contrast .guesses tr.danger  { background: #ffc8c8; color: #000; }
-.high-contrast .panel-heading { background: #000; color: #fff; }
+.high-contrast .field-style--default .current-field table.field td {
+  font-weight: bold;
+  border-right: 2px solid #000;
+  border-bottom: 2px solid #000;
+}
+.high-contrast .field-style--default .current-field table.field td.cell--selected {
+  background-color: #000;
+  color: #fff;
+}
