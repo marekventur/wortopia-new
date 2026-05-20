@@ -9,9 +9,7 @@ export default function PlayerList() {
 
   const isCooldown = currentRound?.state === 'cooldown';
   const players = (isCooldown ? currentRound?.results.players : lastRound?.results.players) ?? [];
-  const maxPoints = (isCooldown && lastRound)
-    ? lastRound.results.words.reduce((sum, w) => sum + w.points, 0)
-    : 0;
+  const maxPoints = lastRound?.results.words.reduce((sum, w) => sum + w.points, 0) ?? 0;
 
   return (
     <div className="panel panel-default">
@@ -28,7 +26,7 @@ export default function PlayerList() {
           >
             <span className="badge">
               {player.points}
-              {isCooldown && maxPoints > 0 && (
+              {maxPoints > 0 && (
                 <small> ({Math.round(100 * player.points / maxPoints)}%)</small>
               )}
             </span>
