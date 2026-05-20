@@ -163,7 +163,7 @@ export default function LastField() {
                   placeholder="Begründung (optional)"
                   value={removeReason}
                   onChange={(e) => setRemoveReason(e.target.value)}
-                  style={{ width: "100%", fontSize: 12, resize: "vertical" }}
+                  style={{ width: "100%", fontSize: 12, resize: "vertical", color: "#000" }}
                 />
                 <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
                   <button
