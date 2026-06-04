@@ -48,6 +48,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <title>Wortopia v2</title>
         <Links />
         <Meta />
+        <script defer src="https://cloud.umami.is/script.js" data-website-id="0c82c79d-5e4d-4a0c-ba72-48d8e8e02690"></script>
       </head>
       <body className="size-4 game-ongoing field-style--default wortopia">
         {children}
