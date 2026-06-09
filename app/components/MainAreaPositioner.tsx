@@ -48,7 +48,7 @@ export default function MainAreaPositioner({ children }: Props) {
             left: mainRect.left,
             width: mainRect.width,
             top: 70,
-            height: "calc(100vh - 70px)",
+            height: "calc(100dvh - 70px)",
           }}
         >
           {children}
