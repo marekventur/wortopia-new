@@ -4,6 +4,7 @@ import Nav from "../components/Nav";
 import MainAreaPositioner from "../components/MainAreaPositioner";
 import CurrentField from "../components/CurrentField";
 import Chat from "../components/Chat";
+import MobileCooldownTimer from "../components/MobileCooldownTimer";
 import PlayerList from "../components/PlayerList";
 import MainNotice from "../components/MainNotice";
 import GameMessages from "../components/GameMessages";
@@ -54,12 +55,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <div><Nav session={session} size={size} initialPlayerCounts={playerCounts} /></div>
 
       <div className="row">
-        {/* Small screen only: field sits above player list in normal flow */}
-        {!isCooldown && (
-          <div className="col-xs-12 hidden-md hidden-lg">
-            <CurrentField />
-          </div>
-        )}
+        {/* Small screen only: field sits above player list in normal flow.
+            During cooldown the field is gone and the chat is hidden, so show
+            the countdown to the next round in its place instead. */}
+        <div className="col-xs-12 hidden-md hidden-lg">
+          {isCooldown ? <MobileCooldownTimer /> : <CurrentField />}
+        </div>
 
         <MainAreaPositioner>
           {!isCooldown && <CurrentField />}
