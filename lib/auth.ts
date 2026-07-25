@@ -1,6 +1,7 @@
 import crypto from "crypto";
+import { secret } from "./secrets.js";
 
-const VERIFY_TOKEN_SECRET = process.env.VERIFY_TOKEN_SECRET ?? "7515641e-35a4-4773-9326-0b7cf3edf9ec";
+const VERIFY_TOKEN_SECRET = secret("VERIFY_TOKEN_SECRET");
 const VERIFY_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /** Hashes a 6-digit OTP code with SHA-256, returns hex string. */
@@ -37,7 +38,11 @@ export function verifyVerifyToken(token: string): string | null {
   if (isNaN(exp) || Date.now() > exp) return null;
 
   const expected = crypto.createHmac("sha256", VERIFY_TOKEN_SECRET).update(payload).digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expected))) return null;
+  // timingSafeEqual throws on length mismatch, so compare lengths first.
+  const hmacBuf = Buffer.from(hmac);
+  const expectedBuf = Buffer.from(expected);
+  if (hmacBuf.length !== expectedBuf.length) return null;
+  if (!crypto.timingSafeEqual(hmacBuf, expectedBuf)) return null;
 
   const email = payload.slice(0, secondLastColon);
   return email || null;
@@ -48,11 +53,31 @@ export function generateSessionToken(): string {
   return crypto.randomUUID();
 }
 
-/** Returns a SQLite-compatible timestamp for 30 days from now, for use as valid_until. */
-export function sessionExpiry(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 30);
+/** How long a session stays valid after it was last used. */
+export const SESSION_TTL_DAYS = 30;
+
+/**
+ * Sessions are rolling: `valid_until` is pushed forward on use (see getSession),
+ * so a session only expires after SESSION_TTL_DAYS of *inactivity*. To avoid a
+ * write on every single request, it's only extended once it drops below this
+ * much remaining — i.e. at most once a day per session.
+ */
+export const SESSION_REFRESH_BELOW_DAYS = SESSION_TTL_DAYS - 1;
+
+function sqliteTimestamp(d: Date): string {
   return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, "");
+}
+
+/** Returns a SQLite-compatible timestamp N days from now. */
+export function daysFromNow(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return sqliteTimestamp(d);
+}
+
+/** Returns a SQLite-compatible timestamp for a fresh session's valid_until. */
+export function sessionExpiry(): string {
+  return daysFromNow(SESSION_TTL_DAYS);
 }
 
 /** Returns a SQLite-compatible timestamp for N minutes from now. */

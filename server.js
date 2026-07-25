@@ -47,20 +47,36 @@ if (DEVELOPMENT) {
   const { getGameServer } = await viteDevServer.ssrLoadModule("./lib/gameServer.ts");
   const { scheduleLeaderboardRefresh } = await viteDevServer.ssrLoadModule("./lib/leaderboardCache.ts");
   const { scheduleDbBackup } = await viteDevServer.ssrLoadModule("./lib/dbBackup.ts");
+  const { scheduleCleanup } = await viteDevServer.ssrLoadModule("./lib/cleanup.ts");
   const gameServer = getGameServer();
   await gameServer.init();
   scheduleLeaderboardRefresh();
   scheduleDbBackup();
+  scheduleCleanup();
   const gameWssMap = gameSource.createGameWsServer();
 
   mountWsRouter(httpServer, gameWssMap);
 } else {
   console.log("Starting production server");
+
+  // Abort before serving anything if a secret would fall back to its public
+  // development default.
+  const { assertSecretsConfigured } = await import("./lib/secrets.js");
+  assertSecretsConfigured();
+
   app.use(
     "/assets",
     express.static("build/client/assets", { immutable: true, maxAge: "1y" })
   );
-  app.use(morgan("tiny"));
+  // Every open tab polls /api/player-counts once a minute, which drowns the log
+  // and grows it by megabytes a day at real traffic. Nothing is learned from a
+  // successful poll, so only log the ones that fail.
+  app.use(
+    morgan("tiny", {
+      skip: (req, res) =>
+        req.url.startsWith("/api/player-counts") && res.statusCode < 400,
+    })
+  );
   app.use(express.static("build/client", { maxAge: "1h" }));
   const mod = await import(BUILD_PATH);
   app.use(mod.app);
@@ -69,10 +85,12 @@ if (DEVELOPMENT) {
   const { createGameWsServer } = await import("./lib/gameWsServer.js");
   const { scheduleLeaderboardRefresh } = await import("./lib/leaderboardCache.js");
   const { scheduleDbBackup } = await import("./lib/dbBackup.js");
+  const { scheduleCleanup } = await import("./lib/cleanup.js");
   const gameServer = getGameServer();
   await gameServer.init();
   scheduleLeaderboardRefresh();
   scheduleDbBackup();
+  scheduleCleanup();
   const gameWssMap = createGameWsServer();
 
   mountWsRouter(httpServer, gameWssMap);

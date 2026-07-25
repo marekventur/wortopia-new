@@ -2,6 +2,7 @@ import type { Route } from "./+types/rangliste";
 import Nav from "../components/Nav";
 import { getOrCreateSession } from "../../lib/session.js";
 import { getDb } from "../../lib/db.js";
+import { maskName } from "../../lib/profanity.js";
 
 type LeaderboardRow = {
   rank: number;
@@ -60,6 +61,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const generatedAt = leaderboard[0]?.generated_at ?? null;
 
+  // Mask after querying — the query has to match the real name to pull the
+  // logged-in user's row in from outside the top 100. loggedInName is masked
+  // the same way so the client still highlights the right row.
+  const shownLeaderboard = leaderboard.map(row => ({
+    ...row,
+    name: maskName(row.name),
+    team: maskName(row.team),
+  }));
+
   // Personal stats: live query, fast because it filters by user_id first
   let personal: PersonalRow | null = null;
   if (session.type === "user") {
@@ -85,7 +95,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const headers = cookieHeader ? { "Set-Cookie": cookieHeader } : undefined;
-  const payload = { session, days, size, sortBy, leaderboard, personal, generatedAt, loggedInName };
+  const payload = {
+    session, days, size, sortBy,
+    leaderboard: shownLeaderboard,
+    personal, generatedAt,
+    loggedInName: maskName(loggedInName),
+  };
   return headers ? Response.json(payload, { headers }) : payload;
 }
 

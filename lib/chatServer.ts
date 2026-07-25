@@ -1,9 +1,25 @@
 import { EventEmitter } from "events";
 import { getDb } from "./db.js";
+import { maskName, maskText } from "./profanity.js";
 import type { ChatMessage } from "./chatTypes.js";
 
 const MAX_MESSAGES = 100;
 const MAX_MESSAGE_LENGTH = 500;
+
+/**
+ * Masks a message on its way out. Stored rows are left untouched so the filter
+ * can be adjusted later without having lost anything.
+ */
+function present(message: ChatMessage): ChatMessage {
+  return {
+    ...message,
+    username: maskName(message.username),
+    // "PROPOSAL:<id>" markers carry no prose and pass through unchanged.
+    message: message.message.startsWith("PROPOSAL:")
+      ? message.message
+      : maskText(message.message),
+  };
+}
 
 export class ChatServer extends EventEmitter {
   getHistory(size: number): ChatMessage[] {
@@ -18,7 +34,9 @@ export class ChatServer extends EventEmitter {
            LIMIT ?`,
         )
         .all(size, MAX_MESSAGES) as ChatMessage[]
-    ).reverse();
+    )
+      .reverse()
+      .map(present);
   }
 
   addMessage(
@@ -43,8 +61,9 @@ export class ChatServer extends EventEmitter {
       )
       .get(result.lastInsertRowid) as ChatMessage;
 
-    this.emit("message", { size, message });
-    return message;
+    const shown = present(message);
+    this.emit("message", { size, message: shown });
+    return shown;
   }
 }
 

@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Nothing useful for crawlers behind these, and the API is per-session.
+Disallow: /api/
+Disallow: /login
+Disallow: /account
+Disallow: /einstellungen
+
+Sitemap: https://wortopia.de/sitemap.xml

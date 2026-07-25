@@ -417,7 +417,17 @@ assert(updates4.length === 1,  `update:4 emitted on cooldown transition`);
 assert(updates5.length === 1,  `update:5 emitted on cooldown transition`);
 assert(updates4[0].current_round.state === "cooldown", `update carries cooldown state`);
 assert(updates4[0].current_round.id === TEST_ROUND,    `update still shows round ${TEST_ROUND}`);
-assert(updates4[0].last_round === null,                `last_round is null during cooldown`);
+
+// Cooldown is when the solution list is shown, so last_round is populated with
+// the round that just ended — the client renders it in LastField.
+assert(updates4[0].last_round !== null,
+  `last_round is populated during cooldown`);
+assert(updates4[0].last_round.id === TEST_ROUND,
+  `last_round is the round that just ended (${TEST_ROUND})`);
+assert(updates4[0].last_round.field === updates4[0].current_round.field,
+  `last_round shows the field that was just played`);
+assert(Array.isArray(updates4[0].last_round.results.words),
+  `last_round carries the full word list`);
 
 // Tick during cooldown — no further updates
 clock.ms = BASE_MS + GAME_DURATION_MS + 10_000; // t=190s

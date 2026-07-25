@@ -65,6 +65,8 @@ export type GuessResponse = {
 type SizeState = {
   current: FieldCache;
   next: FieldCache | null;
+  /** Round currently being pre-computed, to avoid computing it twice. */
+  computingRoundId: number | null;
   prevRoundId: number;
   prevPhase: "ongoing" | "cooldown";
   lastRound: LastRoundPayload | null;
@@ -143,6 +145,7 @@ export class GameServer extends EventEmitter {
       this.state.set(size, {
         current: { roundId, field: currentField, validWords: currentValidWords },
         next: { roundId: nextRoundId, field: nextField, validWords: nextValidWords },
+        computingRoundId: null,
         prevRoundId: roundId,
         prevPhase: phase,
         lastRound,
@@ -264,13 +267,26 @@ export class GameServer extends EventEmitter {
 
   private async computeNext(size: GameSize, currentRoundId: number) {
     const nextRoundId = currentRoundId + 1;
-    const field = generateField(nextRoundId, size);
-    const validWords = await Promise.resolve(computeValidWords(field, size));
     const s = this.state.get(size)!;
-    s.next = { roundId: nextRoundId, field, validWords };
-    console.log(
-      `[GameServer] Pre-computed round ${nextRoundId} size ${size}: ${validWords.size} valid words`,
-    );
+
+    // Both phase transitions in tick() ask for the same next round: once when
+    // the round starts, once when it enters cooldown. Computing it twice means
+    // scanning the dictionary twice and blocking the event loop for nothing.
+    // The second call is kept as a safety net for when the first didn't run
+    // (e.g. the server started mid-round), so just skip the redundant work.
+    if (s.next?.roundId === nextRoundId || s.computingRoundId === nextRoundId) return;
+
+    s.computingRoundId = nextRoundId;
+    try {
+      const field = generateField(nextRoundId, size);
+      const validWords = await Promise.resolve(computeValidWords(field, size));
+      s.next = { roundId: nextRoundId, field, validWords };
+      console.log(
+        `[GameServer] Pre-computed round ${nextRoundId} size ${size}: ${validWords.size} valid words`,
+      );
+    } finally {
+      if (s.computingRoundId === nextRoundId) s.computingRoundId = null;
+    }
   }
 
   // -------------------------------------------------------------------------

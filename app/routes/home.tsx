@@ -10,15 +10,19 @@ import MainNotice from "../components/MainNotice";
 import GameMessages from "../components/GameMessages";
 import Guesses from "../components/Guesses";
 import LastField from "../components/LastField";
-import { redirect } from "react-router";
-import { createGuestToken, getSession, sessionCookie, type Session } from "../../lib/session.js";
+import { createGuestSession, getSession, type Session } from "../../lib/session.js";
 import { getGameServer } from "../../lib/gameServer.js";
 import GameProvider from "../components/GameProvider";
 import type { GameSize } from "../stores/gameStore";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // This route is a bare ":size" segment, so it also catches every unknown
+  // top-level path. Anything that isn't a board must 404 rather than redirect
+  // to /4, otherwise typos, stale links and crawlers all get a soft 200.
   const sizeNum = Number(params.size);
-  if (sizeNum !== 4 && sizeNum !== 5) return redirect("/4");
+  if (sizeNum !== 4 && sizeNum !== 5) {
+    throw new Response("Not Found", { status: 404 });
+  }
   const size = sizeNum as GameSize;
 
   const session = await getSession(request);
@@ -35,12 +39,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // First visit — assign a guest ID and set cookie
-  const guestId = Math.floor(Math.random() * 100_001);
-  const guestToken = createGuestToken(guestId);
-  const cookieHeader = await sessionCookie.serialize(guestToken);
+  const { session: guestSession, cookieHeader } = await createGuestSession();
 
   return Response.json(
-    { session: { type: "guest", guestId } as Session, size, playerCounts },
+    { session: guestSession as Session, size, playerCounts },
     { headers: { "Set-Cookie": cookieHeader } }
   );
 }

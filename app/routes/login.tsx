@@ -13,9 +13,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { session };
 }
 
+type Account = { id: number; name: string; games: number; lastPlayed: string | null };
+
 type Step =
   | { name: "email" }
   | { name: "code"; email: string }
+  // Several accounts share this address — imported from the old site, which
+  // keyed login on username+password and let a household use one address.
+  | { name: "choose"; email: string; verifyToken: string; accounts: Account[] }
+  // Verified an address with no account behind it. Deliberately a stop rather
+  // than a straight hand-off to registration: people coming back after a while
+  // often try the wrong address, and silently offering them a new account is
+  // how they end up with a second one and lose their history.
+  | { name: "confirm-new"; email: string; verifyToken: string }
   | { name: "username"; email: string; verifyToken: string };
 
 export default function Login({ loaderData }: Route.ComponentProps) {
@@ -35,11 +45,28 @@ export default function Login({ loaderData }: Route.ComponentProps) {
           <CodeStep
             email={step.email}
             onBack={() => setStep({ name: "email" })}
-            onNewUser={(verifyToken) => setStep({ name: "username", email: step.email, verifyToken })}
+            onNewUser={(verifyToken) => setStep({ name: "confirm-new", email: step.email, verifyToken })}
+            onChoose={(verifyToken, accounts) =>
+              setStep({ name: "choose", email: step.email, verifyToken, accounts })
+            }
+          />
+        )}
+        {step.name === "choose" && (
+          <ChooseAccountStep
+            email={step.email}
+            verifyToken={step.verifyToken}
+            accounts={step.accounts}
+          />
+        )}
+        {step.name === "confirm-new" && (
+          <ConfirmNewStep
+            email={step.email}
+            onTryAnotherEmail={() => setStep({ name: "email" })}
+            onCreate={() => setStep({ name: "username", email: step.email, verifyToken: step.verifyToken })}
           />
         )}
         {step.name === "username" && (
-          <UsernameStep verifyToken={step.verifyToken} />
+          <UsernameStep email={step.email} verifyToken={step.verifyToken} />
         )}
       </div>
     </>
@@ -89,10 +116,12 @@ function CodeStep({
   email,
   onBack,
   onNewUser,
+  onChoose,
 }: {
   email: string;
   onBack: () => void;
   onNewUser: (verifyToken: string) => void;
+  onChoose: (verifyToken: string, accounts: Account[]) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -112,6 +141,8 @@ function CodeStep({
         setError(json.error ?? "Fehler bei der Verifizierung.");
       } else if (json.type === "existing") {
         window.location.href = "/4";
+      } else if (json.type === "choose") {
+        onChoose(json.verifyToken, json.accounts);
       } else {
         onNewUser(json.verifyToken);
       }
@@ -176,7 +207,115 @@ function CodeStep({
   );
 }
 
-function UsernameStep({ verifyToken }: { verifyToken: string }) {
+function ChooseAccountStep({
+  email,
+  verifyToken,
+  accounts,
+}: {
+  email: string;
+  verifyToken: string;
+  accounts: Account[];
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<number | null>(null);
+
+  async function choose(userId: number) {
+    setError(null);
+    setPending(userId);
+    try {
+      const body = new FormData();
+      body.set("verifyToken", verifyToken);
+      body.set("userId", String(userId));
+      const res = await fetch("/api/auth/select", { method: "POST", body });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? "Fehler bei der Anmeldung.");
+        setPending(null);
+      } else {
+        window.location.href = "/4";
+      }
+    } catch {
+      setError("Netzwerkfehler. Bitte versuche es erneut.");
+      setPending(null);
+    }
+  }
+
+  return (
+    <div>
+      {error && <div className="alert alert-danger">{error}</div>}
+      <p>
+        Zu <strong>{email}</strong> gehören mehrere Konten. Welches möchtest du
+        benutzen?
+      </p>
+      <div className="list-group" style={{ marginBottom: 12 }}>
+        {accounts.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            className="list-group-item"
+            style={{ display: "block", width: "100%", textAlign: "left" }}
+            disabled={pending !== null}
+            onClick={() => choose(a.id)}
+          >
+            <strong>{a.name}</strong>
+            <span className="text-muted" style={{ float: "right" }}>
+              {pending === a.id
+                ? "..."
+                : a.lastPlayed
+                  ? `${a.games} Runden · zuletzt ${formatDate(a.lastPlayed)}`
+                  : "noch nicht gespielt"}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="text-muted">
+        Die Konten lassen sich nicht zusammenlegen — melde dich einfach mit dem
+        an, das du weiterspielen möchtest.
+      </p>
+    </div>
+  );
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso.replace(" ", "T"));
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("de-DE");
+}
+
+function ConfirmNewStep({
+  email,
+  onTryAnotherEmail,
+  onCreate,
+}: {
+  email: string;
+  onTryAnotherEmail: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <div>
+      <div className="alert alert-info">
+        Diese Email-Adresse wurde bisher noch nicht verwendet.
+      </div>
+      <p>
+        Wenn <strong>{email}</strong> die richtige Adresse ist, kannst du ein
+        neues Konto erstellen.
+      </p>
+      <button
+        type="button"
+        className="btn btn-primary"
+        style={{ marginRight: 8 }}
+        onClick={onCreate}
+        autoFocus
+      >
+        Neues Konto erstellen
+      </button>
+      <button type="button" className="btn btn-link" onClick={onTryAnotherEmail}>
+        Email ändern
+      </button>
+    </div>
+  );
+}
+
+function UsernameStep({ email, verifyToken }: { email: string; verifyToken: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -205,6 +344,10 @@ function UsernameStep({ verifyToken }: { verifyToken: string }) {
     <form onSubmit={handleSubmit}>
       {error && <div className="alert alert-danger">{error}</div>}
       <p>Willkommen! Wähle einen Anzeigenamen für dein Konto.</p>
+      <p>
+        Das Konto wird mit <strong>{email}</strong> verknüpft — mit dieser
+        Adresse meldest du dich in Zukunft an.
+      </p>
       <div className="form-group">
         <label htmlFor="username">Name (4–15 Zeichen, keine Leerzeichen)</label>
         <input type="text" className="form-control" name="username" id="username" placeholder="Name" required autoFocus />

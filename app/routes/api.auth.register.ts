@@ -44,20 +44,38 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "Diese Email-Adresse ist bereits registriert." }, { status: 409 });
   }
 
-  // Create user (pw_hash is NULL for passwordless accounts)
-  const result = db
-    .prepare("INSERT INTO users (name, pw_hash) VALUES (?, NULL)")
-    .run(username) as { lastInsertRowid: number };
-  const userId = result.lastInsertRowid;
-
-  db.prepare("INSERT INTO user_emails (user_id, email) VALUES (?, ?)").run(userId, email);
-
-  // Create session
   const token = generateSessionToken();
   const validUntil = sessionExpiry();
-  db.prepare(
-    "INSERT INTO user_sessions (user_id, session_token, valid_until) VALUES (?, ?, ?)"
-  ).run(userId, token, validUntil);
+
+  // All three rows or none. A user without a user_emails row can never log in
+  // again — there'd be no address to send a code to — so this must not be able
+  // to half-succeed.
+  const createAccount = db.transaction(() => {
+    const result = db
+      .prepare("INSERT INTO users (name, pw_hash) VALUES (?, NULL)")
+      .run(username) as { lastInsertRowid: number | bigint };
+    const userId = Number(result.lastInsertRowid);
+
+    db.prepare("INSERT INTO user_emails (user_id, email) VALUES (?, ?)").run(userId, email);
+    db.prepare(
+      "INSERT INTO user_sessions (user_id, session_token, valid_until) VALUES (?, ?, ?)"
+    ).run(userId, token, validUntil);
+  });
+
+  try {
+    createAccount();
+  } catch (err: unknown) {
+    // The name and email uniqueness checks above can lose a race; the database
+    // constraints are the real guard, so turn them into the same 409.
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("UNIQUE") && msg.includes("user_emails")) {
+      return data({ error: "Diese Email-Adresse ist bereits registriert." }, { status: 409 });
+    }
+    if (msg.includes("UNIQUE") && msg.includes("users.name")) {
+      return data({ error: "Dieser Name ist bereits vergeben." }, { status: 409 });
+    }
+    throw err;
+  }
 
   const cookieHeader = await sessionCookie.serialize(token);
   return data({ ok: true }, { headers: { "Set-Cookie": cookieHeader } });

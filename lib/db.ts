@@ -35,6 +35,13 @@ const SCHEMA = `
     email    TEXT NOT NULL
   );
 
+  -- NOT unique: the old site keyed login on username+password and let several
+  -- accounts share one address (families, school classes). 138 imported
+  -- addresses have more than one account behind them, so a unique constraint
+  -- here would reject the import outright. Login has to disambiguate instead.
+  CREATE INDEX IF NOT EXISTS user_emails_email
+    ON user_emails (email);
+
   CREATE TABLE IF NOT EXISTS user_sessions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -156,7 +163,26 @@ const SCHEMA = `
     high_contrast  INTEGER NOT NULL DEFAULT 0,
     board_scale    INTEGER NOT NULL DEFAULT 100
   );
+
+  -- Single-row counter handing out unique guest ids. Seeded above the range of
+  -- the old random ids (0..100000) so ids already living in visitors' cookies
+  -- can never be handed out a second time.
+  CREATE TABLE IF NOT EXISTS guest_id_counter (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
+    next_id INTEGER NOT NULL
+  );
+  INSERT OR IGNORE INTO guest_id_counter (id, next_id) VALUES (1, 100001);
 `;
+
+/** Returns a guest id that has never been issued before. */
+export function nextGuestId(): number {
+  const row = getDb()
+    .prepare(
+      "UPDATE guest_id_counter SET next_id = next_id + 1 WHERE id = 1 RETURNING next_id"
+    )
+    .get() as { next_id: number };
+  return row.next_id - 1;
+}
 
 function migrateWordProposals(db: Database.Database): void {
   const cols = (db.prepare("PRAGMA table_info(word_proposals)").all() as { name: string }[]).map(c => c.name);
@@ -217,6 +243,10 @@ export function getDb(): Database.Database {
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
+    // The daily word sync rewrites ~195k rows in one transaction, which grows
+    // the WAL past the size of the database itself. Cap it so checkpoints give
+    // the space back instead of leaving a permanently inflated file.
+    db.pragma("journal_size_limit = 67108864"); // 64 MB
     db.exec(SCHEMA);
     migrateWordProposals(db);
     migrateUserSettings(db);

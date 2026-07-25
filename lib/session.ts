@@ -1,16 +1,29 @@
 import crypto from "crypto";
 import { createCookie } from "react-router";
-import { getDb } from "./db.js";
-import { generateSessionToken, sessionExpiry } from "./auth.js";
+import { getDb, nextGuestId } from "./db.js";
+import {
+  generateSessionToken,
+  sessionExpiry,
+  daysFromNow,
+  SESSION_REFRESH_BELOW_DAYS,
+} from "./auth.js";
+import { secret } from "./secrets.js";
 
-const GUEST_SECRET = process.env.GUEST_TOKEN_SECRET ?? "7515641e-35a4-4773-9326-0b7cf3edf9ec";
+const GUEST_SECRET = secret("GUEST_TOKEN_SECRET");
+
+// The cookie deliberately outlives the session row. Sessions are rolling and
+// expire from inactivity (see getSession); if the cookie expired on its own
+// 30-day schedule it would log active players out anyway, which is what used
+// to push them into re-registering under a new name. 400 days is the maximum
+// browsers will honour.
+const COOKIE_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 
 export const sessionCookie = createCookie("wortopia_session", {
   httpOnly: true,
   sameSite: "lax",
   path: "/",
-  maxAge: 30 * 24 * 60 * 60,
-  secrets: [process.env.COOKIE_SECRET ?? "7515641e-35a4-4773-9326-0b7cf3edf9ec"],
+  maxAge: COOKIE_MAX_AGE_SECONDS,
+  secrets: [secret("COOKIE_SECRET")],
 });
 
 export type SessionUser = {
@@ -42,8 +55,10 @@ function parseGuestToken(token: string): number | null {
   const parts = token.split(":");
   if (parts.length !== 3 || parts[0] !== "guest") return null;
 
+  // Guest ids used to be a random number in [0, 100000]; they now come from a
+  // counter that starts above that range, so both remain valid.
   const guestId = parseInt(parts[1], 10);
-  if (isNaN(guestId) || guestId < 0 || guestId > 100_000) return null;
+  if (!Number.isSafeInteger(guestId) || guestId < 0) return null;
 
   const expected = crypto
     .createHmac("sha256", GUEST_SECRET)
@@ -87,7 +102,16 @@ export async function getSession(request: Request): Promise<Session | null> {
     )
     .get(token) as SessionUser | undefined;
 
-  return row ? { type: "user", user: row } : null;
+  if (!row) return null;
+
+  // Rolling expiry: push valid_until forward, but only once it has dropped
+  // below the refresh threshold, so this costs at most one write per day.
+  db.prepare(
+    `UPDATE user_sessions SET valid_until = ?
+     WHERE session_token = ? AND valid_until < ?`
+  ).run(sessionExpiry(), token, daysFromNow(SESSION_REFRESH_BELOW_DAYS));
+
+  return { type: "user", user: row };
 }
 
 /**
@@ -100,7 +124,20 @@ export async function getOrCreateSession(
   const session = await getSession(request);
   if (session) return { session };
 
-  const guestId = Math.floor(Math.random() * 100_001);
+  return { ...(await createGuestSession()) };
+}
+
+/**
+ * Allocates a fresh guest identity and the cookie that carries it.
+ * Ids come from a counter so two guests can never end up as the same player —
+ * random ids collided often enough to matter (gameWsServer keys the player on
+ * `-guestId`, so a collision merges two people into one).
+ */
+export async function createGuestSession(): Promise<{
+  session: Session;
+  cookieHeader: string;
+}> {
+  const guestId = nextGuestId();
   const guestToken = createGuestToken(guestId);
   const cookieHeader = await sessionCookie.serialize(guestToken);
   return { session: { type: "guest", guestId }, cookieHeader };

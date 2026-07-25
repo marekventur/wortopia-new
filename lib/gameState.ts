@@ -1,5 +1,6 @@
 import { ROUND_DURATION, GAME_DURATION, SCORES } from "./gameConfig.js";
 import { getDb } from "./db.js";
+import { maskName } from "./profanity.js";
 import type { WordDetail, LastRoundResults } from "./gameTypes.js";
 
 export type { WordDetail, LastRoundResults };
@@ -72,8 +73,8 @@ export function buildResults(
     if (!playerMap.has(g.user_id)) {
       playerMap.set(g.user_id, {
         userId: g.user_id,
-        username: g.username,
-        team: g.team,
+        username: maskName(g.username),
+        team: maskName(g.team),
         words: 0,
         points: 0,
       });
@@ -89,10 +90,10 @@ export function buildResults(
     forUserId !== undefined
       ? guesses
           .filter((g) => g.result === "correct" && g.user_id === forUserId)
-          .map((g) => ({ word: g.word, username: g.username }))
+          .map((g) => ({ word: g.word, username: maskName(g.username) }))
       : guesses
           .filter((g) => g.result === "correct")
-          .map((g) => ({ word: g.word, username: g.username }));
+          .map((g) => ({ word: g.word, username: maskName(g.username) }));
 
   return { players, words };
 }
@@ -154,7 +155,7 @@ export function buildLastRoundResults(
   for (const g of guesses) {
     if (g.result !== "correct") continue;
     if (!playerMap.has(g.user_id)) {
-      playerMap.set(g.user_id, { userId: g.user_id, username: g.username, team: g.team, words: 0, points: 0 });
+      playerMap.set(g.user_id, { userId: g.user_id, username: maskName(g.username), team: maskName(g.team), words: 0, points: 0 });
     }
     const p = playerMap.get(g.user_id)!;
     p.words++;

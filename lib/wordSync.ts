@@ -2,6 +2,18 @@ import { getDb } from "./db.js";
 
 const WORDS_URL = "https://spielwoerter.de/api/words.csv";
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 60_000;
+
+/**
+ * A sync replaces the whole dictionary, so a truncated response would silently
+ * break the game. The list only ever shrinks slowly through moderation on
+ * spielwoerter.de (~100 words/day), so anything below this fraction of the
+ * current count means the feed is broken, not that words were removed.
+ */
+const MIN_SHRINK_RATIO = 0.9;
+
+/** Below this, treat the response as broken regardless of what's in the DB. */
+const MIN_ABSOLUTE_WORDS = 1000;
 
 // ---------------------------------------------------------------------------
 // Normalisation
@@ -56,7 +68,9 @@ export async function syncWords(): Promise<void> {
 
   let text: string;
   try {
-    const res = await fetch(WORDS_URL);
+    const res = await fetch(WORDS_URL, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     text = await res.text();
   } catch (err) {
@@ -89,6 +103,19 @@ export async function syncWords(): Promise<void> {
   }
 
   const db = getDb();
+
+  // Sanity check before destroying the existing dictionary.
+  const { current } = db.prepare("SELECT COUNT(*) AS current FROM words").get() as {
+    current: number;
+  };
+  const floor = Math.max(MIN_ABSOLUTE_WORDS, Math.floor(current * MIN_SHRINK_RATIO));
+  if (current > 0 && rows.length < floor) {
+    console.error(
+      `[wordSync] Refusing to sync: got ${rows.length} words but have ${current} ` +
+        `(minimum ${floor}). Feed looks truncated — keeping the current word list.`,
+    );
+    return;
+  }
 
   db.transaction(() => {
     db.exec("DELETE FROM words");

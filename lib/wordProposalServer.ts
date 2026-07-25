@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import crypto from "crypto";
 import { getDb } from "./db.js";
 import { getChatServer } from "./chatServer.js";
+import { maskName, maskText } from "./profanity.js";
 import type { Proposal, ProposalAction, ProposalMap, ProposalStatus } from "./proposalTypes.js";
 
 const VOTE_WINDOW_MINUTES = 30;
@@ -29,13 +30,16 @@ type ProposalRow = {
 function rowToProposal(row: ProposalRow): Proposal {
   return {
     id: row.id,
+    // `word`, `base` and `description` come from the dictionary, not from the
+    // proposer — the German word list genuinely contains vulgar entries that
+    // score points, so masking them here would make proposals unreviewable.
     word: row.word,
     action: row.action as ProposalAction,
     description: row.description,
     base: row.base,
-    reason: row.reason ?? undefined,
+    reason: row.reason ? maskText(row.reason) : undefined,
     proposer: row.user_id,
-    proposerUsername: row.username,
+    proposerUsername: maskName(row.username),
     supporterCount: row.supporter_count,
     opposerCount: row.opposer_count,
     status: row.status as ProposalStatus,
