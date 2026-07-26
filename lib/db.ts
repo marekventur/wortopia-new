@@ -79,9 +79,13 @@ const SCHEMA = `
     UNIQUE (user_id, round_id, size)
   );
 
+  -- Must match the live table: refreshLeaderboardCache() writes a rank column.
+  -- This declaration had drifted, and because CREATE TABLE IF NOT EXISTS leaves
+  -- an existing table alone, the mismatch only shows up on a fresh database.
   CREATE TABLE IF NOT EXISTS leaderboard_cache (
     days         INTEGER NOT NULL,
     size         INTEGER NOT NULL,
+    rank         INTEGER NOT NULL,
     name         TEXT    NOT NULL,
     team         TEXT,
     games        INTEGER NOT NULL,
@@ -89,7 +93,7 @@ const SCHEMA = `
     avg_words    REAL    NOT NULL,
     best_round   INTEGER NOT NULL,
     generated_at TEXT    NOT NULL,
-    PRIMARY KEY (days, size, name)
+    PRIMARY KEY (days, size, rank)
   );
 
   CREATE TABLE IF NOT EXISTS muted_users (
