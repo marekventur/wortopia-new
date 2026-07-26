@@ -143,6 +143,7 @@ function CodeStep({
     setLoading(true);
     const body = new FormData(e.currentTarget);
     body.set("email", email);
+    body.set("code", String(body.get("code") ?? "").replace(/\D/g, ""));
     try {
       const res = await fetch("/api/auth/verify", { method: "POST", body });
       const json = await res.json();
@@ -196,7 +197,9 @@ function CodeStep({
           name="code"
           id="code"
           placeholder="000000"
-          maxLength={6}
+          // Not 6: pasting "012 345" would be truncated to "012 34" and fail
+          // before it was ever sent. Non-digits are stripped on submit instead.
+          maxLength={20}
           inputMode="numeric"
           autoComplete="one-time-code"
           required

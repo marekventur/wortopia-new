@@ -9,7 +9,11 @@ const MAX_ATTEMPTS = 5;
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
-  const code = String(form.get("code") ?? "").trim();
+  // Keep only the digits. The code is rendered with letter-spacing in the
+  // email, so people transcribe it as "012 345" and some clients copy it that
+  // way too — trimming the ends isn't enough, and a mismatch here reads to the
+  // player as "the code is wrong" when they typed exactly what they were sent.
+  const code = String(form.get("code") ?? "").replace(/\D/g, "");
 
   if (!email || !code) {
     return data({ error: "Email und Code sind erforderlich." }, { status: 400 });
@@ -47,7 +51,16 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ error: "Zu viele Fehlversuche. Bitte fordere einen neuen Code an." }, { status: 400 });
     }
     db.prepare("UPDATE email_codes SET attempts = ? WHERE email = ?").run(newAttempts, email);
-    return data({ error: "Falscher Code. Bitte versuche es erneut." }, { status: 400 });
+    // Requesting a new code invalidates the previous one, so someone who asked
+    // twice and reaches for the first email gets "wrong code" for a code they
+    // copied perfectly. Say so rather than leaving them to guess.
+    return data(
+      {
+        error:
+          "Falscher Code. Falls du mehrere Emails bekommen hast, nimm den Code aus der neuesten.",
+      },
+      { status: 400 },
+    );
   }
 
   // Code correct — delete it (single-use)
