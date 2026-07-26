@@ -4,6 +4,20 @@ import { secret } from "./secrets.js";
 const VERIFY_TOKEN_SECRET = secret("VERIFY_TOKEN_SECRET");
 const VERIFY_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Renders an address for the log: enough to match against a support email,
+ * without writing everyone's address to disk in full. "elisabeth@x.de" becomes
+ * "el****th@x.de".
+ */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 1) return "***";
+  const local = email.slice(0, at);
+  const domain = email.slice(at);
+  if (local.length <= 4) return `${local[0]}***${domain}`;
+  return `${local.slice(0, 2)}****${local.slice(-2)}${domain}`;
+}
+
 /** Hashes a 6-digit OTP code with SHA-256, returns hex string. */
 export function hashCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");

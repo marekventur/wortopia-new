@@ -1,6 +1,6 @@
 import { data } from "react-router";
 import type { Route } from "./+types/api.auth.verify";
-import { hashCode, signVerifyToken } from "../../lib/auth.js";
+import { hashCode, signVerifyToken, maskEmail } from "../../lib/auth.js";
 import { createSession, sessionCookie } from "../../lib/session.js";
 import { getDb } from "../../lib/db.js";
 
@@ -13,25 +13,40 @@ export async function action({ request }: Route.ActionArgs) {
   // email, so people transcribe it as "012 345" and some clients copy it that
   // way too — trimming the ends isn't enough, and a mismatch here reads to the
   // player as "the code is wrong" when they typed exactly what they were sent.
-  const code = String(form.get("code") ?? "").replace(/\D/g, "");
+  const raw = String(form.get("code") ?? "");
+  const code = raw.replace(/\D/g, "");
+
+  // Never log the code or its hash — the log would become a way in. Shape only:
+  // how it was formatted, and how far off the length was.
+  const shape =
+    `${code.length} digits` +
+    (raw.trim().length !== code.length ? `, ${raw.trim().length - code.length} non-digit char(s)` : "");
+  const who = maskEmail(email);
 
   if (!email || !code) {
+    console.log(`[auth] ${who} verify rejected: no code submitted (${shape})`);
     return data({ error: "Email und Code sind erforderlich." }, { status: 400 });
   }
 
   const db = getDb();
 
   const row = db
-    .prepare("SELECT code_hash, expires_at, attempts FROM email_codes WHERE email = ?")
-    .get(email) as { code_hash: string; expires_at: string; attempts: number } | undefined;
+    .prepare("SELECT code_hash, prev_code_hash, created_at, expires_at, attempts FROM email_codes WHERE email = ?")
+    .get(email) as
+      | { code_hash: string; prev_code_hash: string | null; created_at: string; expires_at: string; attempts: number }
+      | undefined;
 
   if (!row) {
+    console.log(`[auth] ${who} verify failed: no code on file (already used, expired, or never requested)`);
     return data({ error: "Kein Code gefunden. Bitte fordere einen neuen Code an." }, { status: 400 });
   }
+
+  const ageSeconds = Math.round((Date.now() - new Date(row.created_at).getTime()) / 1000);
 
   // Check expiry
   if (new Date(row.expires_at).getTime() < Date.now()) {
     db.prepare("DELETE FROM email_codes WHERE email = ?").run(email);
+    console.log(`[auth] ${who} verify failed: code expired (issued ${ageSeconds}s ago)`);
     return data({ error: "Der Code ist abgelaufen. Bitte fordere einen neuen Code an." }, { status: 400 });
   }
 
@@ -39,12 +54,21 @@ export async function action({ request }: Route.ActionArgs) {
   // so the MAX_ATTEMPTS'th try still gets checked rather than being discarded.
   if (row.attempts >= MAX_ATTEMPTS) {
     db.prepare("DELETE FROM email_codes WHERE email = ?").run(email);
+    console.log(`[auth] ${who} verify failed: attempt allowance already used up`);
     return data({ error: "Zu viele Fehlversuche. Bitte fordere einen neuen Code an." }, { status: 400 });
   }
 
   // Verify code
   const submitted = hashCode(code);
   if (submitted !== row.code_hash) {
+    // The single most useful thing to know: was this the code from an earlier
+    // email? Only ever compared for the log — a superseded code never logs you in.
+    const superseded = row.prev_code_hash !== null && submitted === row.prev_code_hash;
+    const why = superseded
+      ? "code from an EARLIER email (a newer one was requested since)"
+      : `code did not match (${shape}, issued ${ageSeconds}s ago)`;
+    console.log(`[auth] ${who} verify failed: ${why}, attempt ${row.attempts + 1}/${MAX_ATTEMPTS}`);
+
     const newAttempts = row.attempts + 1;
     if (newAttempts >= MAX_ATTEMPTS) {
       db.prepare("DELETE FROM email_codes WHERE email = ?").run(email);
@@ -81,6 +105,11 @@ export async function action({ request }: Route.ActionArgs) {
        ORDER BY last_played DESC, games DESC`
     )
     .all(email) as Array<{ id: number; name: string; games: number; last_played: string | null }>;
+
+  console.log(
+    `[auth] ${who} code accepted after ${ageSeconds}s, ${row.attempts} earlier failed attempt(s) ` +
+      `-> ${users.length === 0 ? "no account (offering signup)" : users.length === 1 ? "1 account" : users.length + " accounts (picker)"}`,
+  );
 
   if (users.length === 0) {
     // New user — return a signed verify token

@@ -1,6 +1,6 @@
 import { data } from "react-router";
 import type { Route } from "./+types/api.auth.request";
-import { hashCode, expiryMinutes } from "../../lib/auth.js";
+import { hashCode, expiryMinutes, maskEmail } from "../../lib/auth.js";
 import { sendOtpEmail } from "../../lib/mailgun.js";
 import { getDb } from "../../lib/db.js";
 
@@ -18,14 +18,15 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Rate limit: check if a code was sent within the last 60 seconds
   const existing = db
-    .prepare("SELECT created_at FROM email_codes WHERE email = ?")
-    .get(email) as { created_at: string } | undefined;
+    .prepare("SELECT created_at, code_hash, attempts FROM email_codes WHERE email = ?")
+    .get(email) as { created_at: string; code_hash: string; attempts: number } | undefined;
 
   if (existing) {
     const sentAt = new Date(existing.created_at).getTime();
     const secondsAgo = (Date.now() - sentAt) / 1000;
     if (secondsAgo < RATE_LIMIT_SECONDS) {
       const waitSeconds = Math.ceil(RATE_LIMIT_SECONDS - secondsAgo);
+      console.log(`[auth] ${maskEmail(email)} rate-limited, ${waitSeconds}s left`);
       return data(
         { error: `Bitte warte noch ${waitSeconds} Sekunden, bevor du einen neuen Code anforderst.` },
         { status: 429 }
@@ -41,11 +42,24 @@ export async function action({ request }: Route.ActionArgs) {
     INSERT INTO email_codes (email, code_hash, expires_at, attempts)
     VALUES (?, ?, ?, 0)
     ON CONFLICT (email) DO UPDATE SET
+      -- Remember what this replaced, so a later failure can be identified as
+      -- "used the code from the previous email" rather than guessed at.
+      prev_code_hash = email_codes.code_hash,
       code_hash  = excluded.code_hash,
       created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
       expires_at = excluded.expires_at,
       attempts   = 0
   `).run(email, codeHash, expiresAt);
+
+  if (existing) {
+    const age = Math.round((Date.now() - new Date(existing.created_at).getTime()) / 1000);
+    console.log(
+      `[auth] ${maskEmail(email)} new code issued, replacing one ${age}s old ` +
+        `(${existing.attempts} failed attempt(s) against it)`,
+    );
+  } else {
+    console.log(`[auth] ${maskEmail(email)} new code issued`);
+  }
 
   const siteUrl = process.env.SITE_URL ?? "http://localhost:3005";
   try {

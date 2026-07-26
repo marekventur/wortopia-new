@@ -247,6 +247,17 @@ function migrateBoardScale(db: Database.Database): void {
   } catch {}
 }
 
+/**
+ * Keeps the code a request replaced, so a failed login can be positively
+ * identified as "typed the code from an older email" instead of guessed at.
+ * Never accepted for login — only ever compared against, to explain a failure.
+ */
+function migrateEmailCodePrevHash(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE email_codes ADD COLUMN prev_code_hash TEXT").run();
+  } catch {}
+}
+
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
@@ -264,6 +275,7 @@ export function getDb(): Database.Database {
     migrateUserSettings(db);
     migrateWordProposalReason(db);
     migrateBoardScale(db);
+    migrateEmailCodePrevHash(db);
   }
   return db;
 }
