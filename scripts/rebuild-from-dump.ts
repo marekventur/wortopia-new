@@ -74,24 +74,84 @@ function pgTs(ts: string): string {
   return new Date(ts.replace(" ", "T") + "Z").toISOString();
 }
 
-/** Pulls one table's COPY rows out of the dump as arrays of fields. */
+/**
+ * Pulls one table's COPY rows out of the dump as arrays of fields.
+ *
+ * Only for the small tables. user_results has millions of rows and holding
+ * them all at once is what the OOM killer objects to — use streamCopyRows.
+ */
 function extractCopyRows(table: string): (string | null)[][] {
   const result = spawnSync("pg_restore", ["-f", "-", "-a", "-t", table, DUMP_FILE], {
     encoding: "utf8",
-    maxBuffer: 1024 * 1024 * 1024,
+    maxBuffer: 256 * 1024 * 1024,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`pg_restore failed for ${table}: ${result.stderr}`);
 
   const rows: (string | null)[][] = [];
-  let inCopy = false;
   for (const line of result.stdout.split("\n")) {
-    if (line.startsWith("COPY public.")) { inCopy = true; continue; }
-    if (line === "\\.") { inCopy = false; continue; }
-    if (!inCopy || line.trim() === "") continue;
-    rows.push(line.split("\t").map(f => (f === "\\N" ? null : f)));
+    const fields = parseCopyLine(line);
+    if (fields) rows.push(fields);
   }
   return rows;
+}
+
+/** State machine shared by both readers: null means "not a data line". */
+let inCopy = false;
+function parseCopyLine(line: string): (string | null)[] | null {
+  if (line.startsWith("COPY public.")) { inCopy = true; return null; }
+  if (line === "\\.") { inCopy = false; return null; }
+  if (!inCopy || line.trim() === "") return null;
+  return line.split("\t").map(f => (f === "\\N" ? null : f));
+}
+
+/**
+ * Streams one table's COPY rows, handing each to `onRow` as it arrives.
+ *
+ * pg_restore writes faster than we insert, so its stdout is paused while a
+ * batch is committed — otherwise the backlog just moves from pg_restore's
+ * buffer into ours and the memory problem comes back.
+ */
+async function streamCopyRows(
+  table: string,
+  onBatch: (rows: (string | null)[][]) => void,
+  batchSize = 50_000,
+): Promise<void> {
+  const { spawn } = await import("child_process");
+  const child = spawn("pg_restore", ["-f", "-", "-a", "-t", table, DUMP_FILE]);
+
+  inCopy = false;
+  let pending = "";
+  let batch: (string | null)[][] = [];
+  let stderr = "";
+  child.stderr.on("data", d => { stderr += d.toString(); });
+
+  await new Promise<void>((resolve, reject) => {
+    child.stdout.on("data", (chunk: Buffer) => {
+      pending += chunk.toString("utf8");
+      let nl: number;
+      while ((nl = pending.indexOf("\n")) !== -1) {
+        const line = pending.slice(0, nl);
+        pending = pending.slice(nl + 1);
+        const fields = parseCopyLine(line);
+        if (fields) batch.push(fields);
+      }
+      if (batch.length >= batchSize) {
+        child.stdout.pause();
+        const full = batch;
+        batch = [];
+        onBatch(full);
+        child.stdout.resume();
+      }
+    });
+    child.on("error", reject);
+    child.on("close", code => {
+      const tail = parseCopyLine(pending);
+      if (tail) batch.push(tail);
+      if (batch.length) onBatch(batch);
+      code === 0 ? resolve() : reject(new Error(`pg_restore failed for ${table}: ${stderr}`));
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -187,14 +247,13 @@ console.log("user_emails...");
 // --- user_results -----------------------------------------------------------
 console.log("user_results (a few million rows, takes a moment)...");
 {
-  const rows = extractCopyRows("user_results");
   const insert = db.prepare(
     `INSERT OR IGNORE INTO user_results
        (user_id, round_id, finished, words, points, max_words, max_points, size)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   let inserted = 0, skipped = 0;
-  db.transaction(() => {
+  const writeBatch = db.transaction((rows: (string | null)[][]) => {
     for (const [id, user_id, finished, words, points, max_words, max_points, size] of rows) {
       const uid = parseInt(user_id!, 10);
       if (!keptUserIds.has(uid)) { skipped++; continue; }
@@ -207,7 +266,14 @@ console.log("user_results (a few million rows, takes a moment)...");
       );
       inserted++;
     }
-  })();
+  });
+
+  await streamCopyRows("user_results", rows => {
+    writeBatch(rows);
+    if (inserted % 500_000 < 50_000) {
+      process.stdout.write(`  ${inserted}...\n`);
+    }
+  });
   console.log(`  ${inserted} imported, ${skipped} skipped (account not imported)`);
 }
 
