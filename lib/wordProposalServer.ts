@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getDb } from "./db.js";
 import { getChatServer } from "./chatServer.js";
 import { maskName, maskText } from "./profanity.js";
+import { setMaxListenersForConnections } from "./eventLimits.js";
 import type { Proposal, ProposalAction, ProposalMap, ProposalStatus } from "./proposalTypes.js";
 
 const VOTE_WINDOW_MINUTES = 30;
@@ -54,6 +55,7 @@ export class WordProposalServer extends EventEmitter {
 
   constructor() {
     super();
+    setMaxListenersForConnections(this);
     this.seedProposedWords();
     this.startFinalizationSweep();
     this.startProposedWordsCleanup();

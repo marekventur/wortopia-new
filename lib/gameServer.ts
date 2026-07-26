@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { getDb } from "./db.js";
 import { generateField } from "./fieldGenerator.js";
 import { computeValidWords } from "./fieldWords.js";
+import { setMaxListenersForConnections } from "./eventLimits.js";
 import {
   getRoundPhase,
   getSecondsRemaining,
@@ -97,8 +98,10 @@ export class GameServer extends EventEmitter {
 
   constructor(opts: GameServerOptions = {}) {
     super();
-    // Disable Node.js warning — we expect many subscribers (one per WS connection)
-    this.setMaxListeners(0);
+    // Was setMaxListeners(0), i.e. unlimited, which also silenced a genuine
+    // runaway. The shared ceiling is high enough never to fire in normal play
+    // but still catches listeners that are added and never removed.
+    setMaxListenersForConnections(this);
     this.now = opts.now ?? (() => Date.now());
     this.autoSchedule = opts.autoSchedule ?? true;
   }

@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import { getDb } from "./db.js";
 import { maskName, maskText } from "./profanity.js";
+import { setMaxListenersForConnections } from "./eventLimits.js";
 import type { ChatMessage } from "./chatTypes.js";
 
 const MAX_MESSAGES = 100;
@@ -22,6 +23,11 @@ function present(message: ChatMessage): ChatMessage {
 }
 
 export class ChatServer extends EventEmitter {
+  constructor() {
+    super();
+    setMaxListenersForConnections(this);
+  }
+
   getHistory(size: number): ChatMessage[] {
     const db = getDb();
     return (
