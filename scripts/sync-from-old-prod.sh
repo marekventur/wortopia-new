@@ -3,9 +3,10 @@ set -euo pipefail
 
 # Rebuilds the v2 database from the old wortopia.de PostgreSQL database.
 #
-# The old site stays the source of truth: everything currently in the v2
-# database is replaced. Safe to run repeatedly — each run produces the same
-# result from the same source.
+# The old site is the source of truth: the account list and history come from
+# it, and the games played on v2 during the beta are merged in on top. Safe to
+# run repeatedly — each run rebuilds from scratch, so the same inputs always
+# give the same result.
 #
 # The new database is built to one side and only swapped in at the end, so the
 # site is down for a restart rather than for the length of the import.
@@ -13,6 +14,10 @@ set -euo pipefail
 #   ./scripts/sync-from-old-prod.sh                  # dump over ssh, then swap
 #   ./scripts/sync-from-old-prod.sh --dump FILE      # use a dump you already have
 #   ./scripts/sync-from-old-prod.sh --build-only     # build, don't touch the live site
+#   ./scripts/sync-from-old-prod.sh --no-merge       # discard the games played on v2
+#
+# By default the games played on v2 during the beta are merged in on top of the
+# import; --no-merge drops them.
 #
 # Requires: pg_restore locally, ssh access to the old server (unless --dump).
 
@@ -27,12 +32,14 @@ PM2="npx --yes pm2@6.0.14"
 DROP_ARGS=()
 DUMP_FILE=""
 BUILD_ONLY=0
+MERGE=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dump)       DUMP_FILE="$2"; shift 2 ;;
     --drop-email) DROP_ARGS+=(--drop-email "$2"); shift 2 ;;
     --build-only) BUILD_ONLY=1; shift ;;
+    --no-merge)   MERGE=0; shift ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -73,7 +80,19 @@ echo
 # --- 2. build ---------------------------------------------------------------
 echo "--- Building new database ---"
 CARRY=()
-[[ -r "$LIVE_DB" ]] && CARRY=(--carry-over "$LIVE_DB")
+if [[ -r "$LIVE_DB" ]]; then
+  CARRY=(--carry-over "$LIVE_DB")
+  # Merge from a copy: the live file is open by the running server and its WAL
+  # would otherwise be read half-applied.
+  if [[ "$MERGE" == "1" ]]; then
+    node -e '
+      const D = require("better-sqlite3");
+      const s = new D(process.argv[1], { readonly: true });
+      s.backup(process.argv[2]).then(() => s.close());
+    ' "$LIVE_DB" "$WORK_DIR/v2-snapshot.db"
+    CARRY+=(--merge-v2 "$WORK_DIR/v2-snapshot.db")
+  fi
+fi
 node --import tsx/esm scripts/rebuild-from-dump.ts \
   "$DUMP_FILE" "$NEW_DB" "${CARRY[@]}" "${DROP_ARGS[@]+"${DROP_ARGS[@]}"}"
 echo
