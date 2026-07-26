@@ -38,7 +38,13 @@ export function refreshLeaderboardCache(): void {
     const rows = db.prepare(`
       SELECT u.name, u.team,
              COUNT(*)                                              AS games,
-             ROUND(100.0 * SUM(r.points) / SUM(r.max_points), 1) AS pct,
+             -- Average of each round's percentage, NOT total points over total
+             -- available. Rounds differ enormously in how much there is to find
+             -- (4x4 averages 159 points available, 5x5 averages 397), and you
+             -- find a smaller share of a big board, so summing first lets the
+             -- biggest rounds dominate and drags everyone down by a different
+             -- amount. This is also what the old site did.
+             ROUND(100.0 * AVG(1.0 * r.points / r.max_points), 1) AS pct,
              ROUND(1.0  * SUM(r.words)  / COUNT(*), 1)           AS avg_words,
              MAX(r.points)                                        AS best_round
       FROM user_results r

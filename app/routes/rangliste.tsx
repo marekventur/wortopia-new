@@ -86,7 +86,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     personal = db.prepare(`
       SELECT COUNT(*)                                              AS games,
-             ROUND(100.0 * SUM(points) / SUM(max_points), 1)     AS pct,
+             -- Must match leaderboardCache: average of per-round percentages,
+             -- otherwise a player's own row disagrees with their ranked row.
+             ROUND(100.0 * AVG(1.0 * points / max_points), 1)    AS pct,
              ROUND(1.0  * SUM(words)  / COUNT(*), 1)             AS avg_words,
              MAX(points)                                          AS best_round
       FROM user_results
