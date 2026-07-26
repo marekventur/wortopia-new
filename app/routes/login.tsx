@@ -68,6 +68,15 @@ export default function Login({ loaderData }: Route.ComponentProps) {
         {step.name === "username" && (
           <UsernameStep email={step.email} verifyToken={step.verifyToken} />
         )}
+
+        {/* Shown on every step: the accounts came across from the old site,
+            where the address on file may be one the player can no longer read.
+            Without a way out, their only option is a second account. */}
+        <hr style={{ marginTop: 24 }} />
+        <p className="text-muted">
+          Kein Zugang zu deinem alten Account?{" "}
+          <a href="mailto:marekventur@gmail.com">melde dich!</a>
+        </p>
       </div>
     </>
   );
