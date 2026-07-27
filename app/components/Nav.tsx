@@ -73,6 +73,9 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
                     <Link to="/account" style={dropdownLinkStyle}>Account</Link>
                   </li>
                   <li>
+                    <Link to="/konten" style={dropdownLinkStyle} onClick={() => setDropdownOpen(false)}>Deine Konten</Link>
+                  </li>
+                  <li>
                     <Link to="/einstellungen" style={dropdownLinkStyle} onClick={() => setDropdownOpen(false)}>Einstellungen</Link>
                   </li>
                   <li role="separator" className="divider" />
@@ -102,6 +105,7 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
             {session.type === "user" ? (
               <>
                 <li className="visible-xs-block"><a href="/account">Account</a></li>
+                <li className="visible-xs-block"><a href="/konten">Deine Konten</a></li>
                 <li className="visible-xs-block"><a href="/einstellungen">Einstellungen</a></li>
                 <li className="visible-xs-block"><a href="#" onClick={(e) => { e.preventDefault(); submit(null, { method: "post", action: "/api/logout" }); }}>Logout</a></li>
               </>

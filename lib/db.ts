@@ -184,6 +184,42 @@ const SCHEMA = `
     next_id INTEGER NOT NULL
   );
   INSERT OR IGNORE INTO guest_id_counter (id, next_id) VALUES (1, 100001);
+
+  -- Password hashes carried over from the old site, kept ONLY so someone can
+  -- prove an imported account is theirs and move it onto an address they can
+  -- actually receive mail at (see lib/claims.ts). They are never a login
+  -- method. Held here rather than on users.pw_hash so "is claimable" is one
+  -- clean predicate, and so the row can be deleted outright once used — the
+  -- hashes are bcrypt cost 6, which is weak by current standards, so the set
+  -- of claimable accounts should only ever shrink.
+  CREATE TABLE IF NOT EXISTS v1_claims (
+    user_id      INTEGER PRIMARY KEY
+                 REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    pw_hash      TEXT    NOT NULL,
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT
+  );
+
+  -- Successful claims. There is no notification to the previous address (for
+  -- imported accounts it is usually stale — that is the whole reason someone
+  -- is claiming), so this table is the only record that a rebind happened.
+  CREATE TABLE IF NOT EXISTS claim_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    username   TEXT    NOT NULL,
+    from_email TEXT,
+    to_email   TEXT    NOT NULL,
+    claimed_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  -- Rate limit for the claimer, not the target. Per-account limits alone would
+  -- still let one person try a single likely password against every imported
+  -- account in turn.
+  CREATE TABLE IF NOT EXISTS claim_attempts (
+    email        TEXT    PRIMARY KEY,
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    window_start TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
 `;
 
 /** Returns a guest id that has never been issued before. */
@@ -258,6 +294,43 @@ function migrateEmailCodePrevHash(db: Database.Database): void {
   } catch {}
 }
 
+/**
+ * Moves the imported password hashes off users.pw_hash into v1_claims.
+ *
+ * A move, not a copy: two live copies of a credential is strictly worse than
+ * one, and accounts created since the rewrite are passwordless anyway
+ * (api/auth/register inserts pw_hash NULL), so afterwards the column is dead.
+ */
+function migrateV1Claims(db: Database.Database): void {
+  const remaining = db
+    .prepare("SELECT COUNT(*) AS c FROM users WHERE pw_hash IS NOT NULL")
+    .get() as { c: number };
+  if (remaining.c === 0) return;
+
+  db.transaction(() => {
+    db.prepare(
+      `INSERT OR IGNORE INTO v1_claims (user_id, pw_hash)
+       SELECT id, pw_hash FROM users WHERE pw_hash IS NOT NULL`
+    ).run();
+    db.prepare("UPDATE users SET pw_hash = NULL WHERE pw_hash IS NOT NULL").run();
+  })();
+
+  console.log(`[claims] moved ${remaining.c} v1 password hash(es) into v1_claims`);
+}
+
+/**
+ * Lets someone drop a nick out of their login picker without deleting it.
+ * Deleting would cascade away the account's whole round history, and five
+ * tables (chat_messages, round_guesses, word_proposals, word_proposal_votes,
+ * muted_users) carry a user_id with no foreign key at all, so a delete would
+ * silently orphan those rows instead of cleaning them up.
+ */
+function migrateHiddenAccounts(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE users ADD COLUMN hidden_at TEXT").run();
+  } catch {}
+}
+
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
@@ -276,6 +349,8 @@ export function getDb(): Database.Database {
     migrateWordProposalReason(db);
     migrateBoardScale(db);
     migrateEmailCodePrevHash(db);
+    migrateHiddenAccounts(db);
+    migrateV1Claims(db);
   }
   return db;
 }

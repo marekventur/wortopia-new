@@ -94,15 +94,24 @@ export async function action({ request }: Route.ActionArgs) {
   // from the old site can share an address — it keyed login on username +
   // password and only used email for recovery, so several accounts per address
   // were normal. Those have to stay reachable, hence .all() rather than .get().
+  //
+  // Ordered by last use, because the first row is the one we log in as. "Use"
+  // is the later of a finished round and a login: someone who signed in as an
+  // account but did not finish a round still used it most recently.
   const users = db
     .prepare(
       `SELECT u.id, u.name,
               (SELECT COUNT(*) FROM user_results r WHERE r.user_id = u.id)   AS games,
-              (SELECT MAX(r.finished) FROM user_results r WHERE r.user_id = u.id) AS last_played
+              (SELECT MAX(r.finished) FROM user_results r WHERE r.user_id = u.id) AS last_played,
+              MAX(
+                COALESCE((SELECT MAX(r.finished)    FROM user_results  r WHERE r.user_id = u.id), ''),
+                COALESCE((SELECT MAX(s.created_at)  FROM user_sessions s WHERE s.user_id = u.id), '')
+              ) AS last_used
        FROM users u
        JOIN user_emails e ON e.user_id = u.id
        WHERE e.email = ?
-       ORDER BY last_played DESC, games DESC`
+         AND u.hidden_at IS NULL
+       ORDER BY last_used DESC, games DESC`
     )
     .all(email) as Array<{ id: number; name: string; games: number; last_played: string | null }>;
 
@@ -117,22 +126,18 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ type: "new", verifyToken });
   }
 
-  if (users.length > 1) {
-    // Let the person say which account they want. The verify token is what
-    // proves they control the address; api/auth/select checks the chosen
-    // account actually belongs to it.
-    return data({
-      type: "choose",
-      verifyToken: signVerifyToken(email),
-      accounts: users.map(u => ({
-        id: u.id,
-        name: u.name,
-        games: u.games,
-        lastPlayed: u.last_played,
-      })),
-    });
-  }
-
+  // Always sign in as the most recently used account, even when several share
+  // the address. Picking one from a list was a whole extra step and a whole
+  // extra page, and it could only ever do less than /konten, which also
+  // switches, hides and claims. When there is more than one, the client sends
+  // them there instead of into the game, so they land somewhere that says which
+  // account they are on and lets them change it in one click.
+  //
+  // Hidden accounts are excluded above, so tidying up once means never seeing
+  // this detour again.
   const cookieHeader = await sessionCookie.serialize(await createSession(users[0].id));
-  return data({ type: "existing" }, { headers: { "Set-Cookie": cookieHeader } });
+  return data(
+    { type: "existing", multiple: users.length > 1 },
+    { headers: { "Set-Cookie": cookieHeader } },
+  );
 }

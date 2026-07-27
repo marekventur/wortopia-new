@@ -13,14 +13,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { session };
 }
 
-type Account = { id: number; name: string; games: number; lastPlayed: string | null };
 
 type Step =
   | { name: "email" }
   | { name: "code"; email: string }
-  // Several accounts share this address — imported from the old site, which
-  // keyed login on username+password and let a household use one address.
-  | { name: "choose"; email: string; verifyToken: string; accounts: Account[] }
   // Verified an address with no account behind it. Deliberately a stop rather
   // than a straight hand-off to registration: people coming back after a while
   // often try the wrong address, and silently offering them a new account is
@@ -46,16 +42,6 @@ export default function Login({ loaderData }: Route.ComponentProps) {
             email={step.email}
             onBack={() => setStep({ name: "email" })}
             onNewUser={(verifyToken) => setStep({ name: "confirm-new", email: step.email, verifyToken })}
-            onChoose={(verifyToken, accounts) =>
-              setStep({ name: "choose", email: step.email, verifyToken, accounts })
-            }
-          />
-        )}
-        {step.name === "choose" && (
-          <ChooseAccountStep
-            email={step.email}
-            verifyToken={step.verifyToken}
-            accounts={step.accounts}
           />
         )}
         {step.name === "confirm-new" && (
@@ -125,12 +111,10 @@ function CodeStep({
   email,
   onBack,
   onNewUser,
-  onChoose,
 }: {
   email: string;
   onBack: () => void;
   onNewUser: (verifyToken: string) => void;
-  onChoose: (verifyToken: string, accounts: Account[]) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -150,9 +134,10 @@ function CodeStep({
       if (!res.ok) {
         setError(json.error ?? "Fehler bei der Verifizierung.");
       } else if (json.type === "existing") {
-        window.location.href = "/4";
-      } else if (json.type === "choose") {
-        onChoose(json.verifyToken, json.accounts);
+        // Signed in as the most recently used account. If the address carries
+        // more than one, land on /konten rather than the game, so it is obvious
+        // which one you are on and switching is one click away.
+        window.location.href = json.multiple ? "/konten" : "/4";
       } else {
         onNewUser(json.verifyToken);
       }
@@ -219,79 +204,6 @@ function CodeStep({
   );
 }
 
-function ChooseAccountStep({
-  email,
-  verifyToken,
-  accounts,
-}: {
-  email: string;
-  verifyToken: string;
-  accounts: Account[];
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<number | null>(null);
-
-  async function choose(userId: number) {
-    setError(null);
-    setPending(userId);
-    try {
-      const body = new FormData();
-      body.set("verifyToken", verifyToken);
-      body.set("userId", String(userId));
-      const res = await fetch("/api/auth/select", { method: "POST", body });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "Fehler bei der Anmeldung.");
-        setPending(null);
-      } else {
-        window.location.href = "/4";
-      }
-    } catch {
-      setError("Netzwerkfehler. Bitte versuche es erneut.");
-      setPending(null);
-    }
-  }
-
-  return (
-    <div>
-      {error && <div className="alert alert-danger">{error}</div>}
-      <p>
-        Zu <strong>{email}</strong> gehören mehrere Konten. Welches möchtest du
-        benutzen?
-      </p>
-      <div className="list-group" style={{ marginBottom: 12 }}>
-        {accounts.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            className="list-group-item"
-            style={{ display: "block", width: "100%", textAlign: "left" }}
-            disabled={pending !== null}
-            onClick={() => choose(a.id)}
-          >
-            <strong>{a.name}</strong>
-            <span className="text-muted" style={{ float: "right" }}>
-              {pending === a.id
-                ? "..."
-                : a.lastPlayed
-                  ? `${a.games} Runden · zuletzt ${formatDate(a.lastPlayed)}`
-                  : "noch nicht gespielt"}
-            </span>
-          </button>
-        ))}
-      </div>
-      <p className="text-muted">
-        Die Konten lassen sich nicht zusammenlegen — melde dich einfach mit dem
-        an, das du weiterspielen möchtest.
-      </p>
-    </div>
-  );
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso.replace(" ", "T"));
-  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("de-DE");
-}
 
 function ConfirmNewStep({
   email,
@@ -330,6 +242,10 @@ function ConfirmNewStep({
 function UsernameStep({ email, verifyToken }: { email: string; verifyToken: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Set when the chosen name turns out to be an imported account that still has
+  // its old password. Rather than a dead-end "already taken", ask for it: the
+  // person typing that exact name is usually the one who used to own it.
+  const [claimable, setClaimable] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -342,6 +258,7 @@ function UsernameStep({ email, verifyToken }: { email: string; verifyToken: stri
       const json = await res.json();
       if (!res.ok) {
         setError(json.error ?? "Fehler beim Erstellen des Accounts.");
+        if (json.claimable) setClaimable(String(body.get("username") ?? ""));
       } else {
         window.location.href = "/4";
       }
@@ -362,10 +279,25 @@ function UsernameStep({ email, verifyToken }: { email: string; verifyToken: stri
       </p>
       <div className="form-group">
         <label htmlFor="username">Name (4–15 Zeichen, keine Leerzeichen)</label>
-        <input type="text" className="form-control" name="username" id="username" placeholder="Name" required autoFocus />
+        <input type="text" className="form-control" name="username" id="username" placeholder="Name" required autoFocus
+               defaultValue={claimable ?? undefined} />
       </div>
+
+      {claimable && (
+        <div className="form-group">
+          <label htmlFor="claim-pw">Passwort von früher</label>
+          <input type="password" className="form-control" name="password" id="claim-pw"
+                 autoComplete="current-password" autoFocus />
+          <p className="help-block">
+            Gehört „{claimable}“ dir? Dann melde dich mit dem Passwort von früher an, und
+            der Name zieht auf <strong>{email}</strong> um. Falls nicht, wähle einfach
+            einen anderen Namen.
+          </p>
+        </div>
+      )}
+
       <button type="submit" className="btn btn-primary" disabled={loading}>
-        {loading ? "..." : "Konto erstellen"}
+        {loading ? "..." : claimable ? "Konto übernehmen" : "Konto erstellen"}
       </button>
     </form>
   );

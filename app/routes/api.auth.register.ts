@@ -1,13 +1,17 @@
 import { data } from "react-router";
 import type { Route } from "./+types/api.auth.register";
 import { verifyVerifyToken, generateSessionToken, sessionExpiry } from "../../lib/auth.js";
-import { sessionCookie } from "../../lib/session.js";
+import { sessionCookie, createSession } from "../../lib/session.js";
+import { claimAccount, isClaimable } from "../../lib/claims.js";
 import { getDb } from "../../lib/db.js";
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const verifyToken = String(form.get("verifyToken") ?? "").trim();
   const username = String(form.get("username") ?? "").trim();
+  // Optional: present only when the chosen name turned out to be a claimable
+  // v1 account and the person said it was theirs.
+  const password = String(form.get("password") ?? "");
 
   if (!verifyToken || !username) {
     return data({ error: "Ungültige Anfrage." }, { status: 400 });
@@ -30,10 +34,37 @@ export async function action({ request }: Route.ActionArgs) {
 
   const db = getDb();
 
-  // Check username uniqueness
+  // Check username uniqueness. A taken name is a dead end for a new account —
+  // but if it is an imported account still carrying its old password, the
+  // person typing it is very often its original owner, coming back and finding
+  // their nick "gone". Offer the password instead of turning them away; that is
+  // the moment they actually remember it.
   const existing = db.prepare("SELECT id FROM users WHERE name = ? COLLATE NOCASE").get(username);
   if (existing) {
-    return data({ error: "Dieser Name ist bereits vergeben." }, { status: 409 });
+    if (!password) {
+      return data(
+        {
+          error: isClaimable(username)
+            ? "Diesen Namen gab es beim alten Wortopia. Wenn er dir gehört, gib sein Passwort ein."
+            : "Dieser Name ist bereits vergeben.",
+          claimable: isClaimable(username),
+        },
+        { status: 409 },
+      );
+    }
+
+    // Password supplied: claim it onto this (already verified) address and log
+    // straight in, rather than creating a second account.
+    const claim = await claimAccount(username, password, email);
+    if (!claim.ok) {
+      return data({ error: claim.error, claimable: true }, { status: claim.status });
+    }
+
+    const claimCookie = await sessionCookie.serialize(await createSession(claim.userId));
+    return data(
+      { ok: true, claimed: true, username: claim.username },
+      { headers: { "Set-Cookie": claimCookie } },
+    );
   }
 
   // Check email not already registered (race condition guard)
