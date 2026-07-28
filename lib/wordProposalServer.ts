@@ -4,10 +4,19 @@ import { getDb } from "./db.js";
 import { getChatServer } from "./chatServer.js";
 import { maskName, maskText } from "./profanity.js";
 import { setMaxListenersForConnections } from "./eventLimits.js";
+import { SIZES } from "./gameConfig.js";
 import type { Proposal, ProposalAction, ProposalMap, ProposalStatus } from "./proposalTypes.js";
 
 const VOTE_WINDOW_MINUTES = 30;
-const HISTORY_WINDOW_MINUTES = 60;
+/**
+ * How many chat messages per board size the client is given on connect. Must
+ * match MAX_MESSAGES in chatServer: a proposal whose chat line is still in that
+ * history but whose data is not sent renders as nothing at all (Chat.tsx skips
+ * the message when the proposal is missing), so the report a player filed
+ * silently disappears from the conversation while everything around it stays.
+ * That is what "meine Meldungen sind wieder weg" was.
+ */
+const CHAT_HISTORY_MESSAGES = 100;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 const SPIELWOERTER_API_URL = "https://spielwoerter.de/api/partner/suggestions";
@@ -195,7 +204,7 @@ export class WordProposalServer extends EventEmitter {
     this.emit("proposals_update", { proposals });
   }
 
-  /** Returns all proposals from the last 60 minutes. Lazily finalizes expired ones. */
+  /** Returns every proposal the chat can still show. Lazily finalizes expired ones. */
   getProposals(): ProposalMap {
     this.finalizeExpired();
     return this.buildProposalMap();
@@ -203,6 +212,18 @@ export class WordProposalServer extends EventEmitter {
 
   private buildProposalMap(): ProposalMap {
     const db = getDb();
+
+    // Scoped to the chat rather than to a clock: a proposal stays as long as the
+    // line announcing it is still in the history someone would be shown, so a
+    // report keeps its outcome next to it for as long as it is on screen — and
+    // the payload stays bounded by the same limit the chat already has.
+    const chatWindow = SIZES.map(
+      (size) => `SELECT message FROM (
+           SELECT message FROM chat_messages WHERE size = ${size}
+           ORDER BY id DESC LIMIT ${CHAT_HISTORY_MESSAGES}
+         )`,
+    ).join(" UNION ALL ");
+
     const rows = db
       .prepare(
         `SELECT p.id, p.user_id, p.username, p.word, p.action, p.description, p.base, p.reason,
@@ -211,7 +232,8 @@ export class WordProposalServer extends EventEmitter {
                 COALESCE(SUM(CASE WHEN v.vote = 'oppose' THEN 1 ELSE 0 END), 0) AS opposer_count
          FROM word_proposals p
          LEFT JOIN word_proposal_votes v ON v.proposal_id = p.id
-         WHERE p.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-${HISTORY_WINDOW_MINUTES} minutes')
+         WHERE p.status = 'open'
+            OR 'PROPOSAL:' || p.id IN (${chatWindow})
          GROUP BY p.id
          ORDER BY p.created_at ASC`,
       )
