@@ -49,7 +49,14 @@ export default function CurrentField() {
 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const inputRef = useCallback((el: HTMLInputElement | null) => { el?.focus(); }, []);
+  // Kept as well as focused on mount: clicking anything else — the rotate
+  // button above all — takes the caret out of the word box, and a player who is
+  // three seconds into a round should never have to click back into it.
+  const inputElRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useCallback((el: HTMLInputElement | null) => {
+    inputElRef.current = el;
+    el?.focus();
+  }, []);
   const chainRef = useRef<Cell[]>([]);
   const leftButtonDownRef = useRef(false);
   const startSwipingFieldRef = useRef<Cell | null>(null);
@@ -345,11 +352,17 @@ export default function CurrentField() {
     }
   };
 
+  /** Turns the board and puts the caret back where the typing happens. */
+  const rotate = () => {
+    setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270);
+    clearChain();
+    inputElRef.current?.focus();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (wordEntered.toLowerCase() === 'r') {
-      setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270);
-      clearChain();
+      rotate();
       return;
     }
     if (wordEntered) submitWord(wordEntered);
@@ -441,7 +454,7 @@ export default function CurrentField() {
             <button
               type="button"
               className="btn btn-default btn-sm"
-              onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
+              onClick={rotate}
               title="Feld drehen (oder 'r' eingeben)"
               style={{ padding: '0px 7px', height: '30px', marginLeft: 4, flexShrink: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
@@ -462,7 +475,7 @@ export default function CurrentField() {
             <button
               type="button"
               className="btn btn-default btn-sm"
-              onClick={() => { setRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270); clearChain(); }}
+              onClick={rotate}
               title="Feld drehen"
               style={{ marginLeft: 10, border: 'none', background: 'transparent' }}
             >
