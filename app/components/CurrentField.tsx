@@ -359,8 +359,24 @@ export default function CurrentField() {
     inputElRef.current?.focus();
   };
 
+  /**
+   * The board turns on ".", straight away and without submitting.
+   *
+   * It cannot be a letter: the box has focus for the whole round, so any letter
+   * key is a letter someone is trying to type. A full stop never appears in a
+   * word, which leaves it free to mean something else.
+   */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === '.') {
+      e.preventDefault();
+      rotate();
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Kept from before "." existed: the tooltip advertised typing r and
+    // pressing enter, and people learned it.
     if (wordEntered.toLowerCase() === 'r') {
       rotate();
       return;
@@ -435,6 +451,7 @@ export default function CurrentField() {
               id="word-input"
               value={wordEntered}
               onChange={e => handleTypeWord(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={isCooldown}
               placeholder={isCooldown ? 'Pause…' : ''}
               autoComplete="off"
@@ -455,7 +472,7 @@ export default function CurrentField() {
               type="button"
               className="btn btn-default btn-sm"
               onClick={rotate}
-              title="Feld drehen (oder 'r' eingeben)"
+              title="Feld drehen (Taste .)"
               style={{ padding: '0px 7px', height: '30px', marginLeft: 4, flexShrink: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <RotateCcw size={13} />
@@ -476,7 +493,7 @@ export default function CurrentField() {
               type="button"
               className="btn btn-default btn-sm"
               onClick={rotate}
-              title="Feld drehen"
+              title="Feld drehen (Taste .)"
               style={{ marginLeft: 10, border: 'none', background: 'transparent' }}
             >
               <RotateCcw size={16} />
