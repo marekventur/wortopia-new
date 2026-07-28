@@ -2,47 +2,25 @@ import { data } from "react-router";
 import type { Route } from "./+types/api.settings";
 import { getSessionUser } from "../../lib/session.js";
 import { getDb } from "../../lib/db.js";
+import {
+  DEFAULT_SETTINGS,
+  coerceSettings,
+  rowToSettings,
+  settingsPatchError,
+  type SettingsRow,
+} from "../../lib/settings.js";
 
-type WordListSort = "default" | "alpha" | "points";
-
-const VALID_SORTS: WordListSort[] = ["default", "alpha", "points"];
-
-const VALID_SCALES = [75, 90, 100, 115, 125, 150];
-
-type SettingsRow = {
-  show_rotate: number;
-  word_list_sort: string;
-  high_contrast: number;
-  board_scale: number;
-};
-
-function getDefaultSettings() {
-  return { showRotate: true, wordListSort: "default" as WordListSort, highContrast: false, boardScale: 100 };
-}
-
-function rowToSettings(row: SettingsRow) {
-  return {
-    showRotate: row.show_rotate !== 0,
-    wordListSort: (VALID_SORTS.includes(row.word_list_sort as WordListSort)
-      ? row.word_list_sort
-      : "default") as WordListSort,
-    highContrast: row.high_contrast !== 0,
-    boardScale: VALID_SCALES.includes(row.board_scale) ? row.board_scale : 100,
-  };
-}
+const SELECT_SETTINGS =
+  "SELECT show_rotate, word_list_sort, high_contrast, board_scale FROM user_settings WHERE user_id = ?";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await getSessionUser(request);
-  if (!user) {
-    return data(getDefaultSettings());
-  }
+  // Guests keep their settings in the browser, so there is nothing to return
+  // but the defaults — the client overlays what it has stored.
+  if (!user) return data(DEFAULT_SETTINGS);
 
-  const db = getDb();
-  const row = db
-    .prepare("SELECT show_rotate, word_list_sort, high_contrast, board_scale FROM user_settings WHERE user_id = ?")
-    .get(user.id) as SettingsRow | undefined;
-
-  return data(row ? rowToSettings(row) : getDefaultSettings());
+  const row = getDb().prepare(SELECT_SETTINGS).get(user.id) as SettingsRow | undefined;
+  return data(rowToSettings(row));
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -55,42 +33,16 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "Nicht eingeloggt." }, { status: 401 });
   }
 
-  const body = await request.json() as Record<string, unknown>;
+  const body = (await request.json()) as unknown;
+  const invalid = settingsPatchError(body);
+  if (invalid) return data({ error: invalid }, { status: 400 });
+
   const db = getDb();
+  const existing = db.prepare(SELECT_SETTINGS).get(user.id) as SettingsRow | undefined;
 
-  // Read current settings as base
-  const existing = db
-    .prepare("SELECT show_rotate, word_list_sort, high_contrast, board_scale FROM user_settings WHERE user_id = ?")
-    .get(user.id) as SettingsRow | undefined;
-
-  const current = existing ? rowToSettings(existing) : getDefaultSettings();
-
-  // Validate and apply partial update
-  let showRotate = current.showRotate;
-  let wordListSort = current.wordListSort;
-  let highContrast = current.highContrast;
-  let boardScale = current.boardScale;
-
-  if ("showRotate" in body) {
-    showRotate = Boolean(body.showRotate);
-  }
-  if ("wordListSort" in body) {
-    const val = body.wordListSort as string;
-    if (!VALID_SORTS.includes(val as WordListSort)) {
-      return data({ error: "Ungültiger Sortierwert." }, { status: 400 });
-    }
-    wordListSort = val as WordListSort;
-  }
-  if ("highContrast" in body) {
-    highContrast = Boolean(body.highContrast);
-  }
-  if ("boardScale" in body) {
-    const val = Number(body.boardScale);
-    if (!VALID_SCALES.includes(val)) {
-      return data({ error: "Ungültige Brettgröße." }, { status: 400 });
-    }
-    boardScale = val;
-  }
+  // A partial update over what is already stored: anything absent keeps its
+  // current value rather than snapping back to the default.
+  const next = coerceSettings(body, rowToSettings(existing));
 
   db.prepare(
     `INSERT INTO user_settings (user_id, show_rotate, word_list_sort, high_contrast, board_scale)
@@ -100,7 +52,13 @@ export async function action({ request }: Route.ActionArgs) {
        word_list_sort = excluded.word_list_sort,
        high_contrast  = excluded.high_contrast,
        board_scale    = excluded.board_scale`,
-  ).run(user.id, showRotate ? 1 : 0, wordListSort, highContrast ? 1 : 0, boardScale);
+  ).run(
+    user.id,
+    next.showRotate ? 1 : 0,
+    next.wordListSort,
+    next.highContrast ? 1 : 0,
+    next.boardScale,
+  );
 
-  return data({ showRotate, wordListSort, highContrast, boardScale });
+  return data(next);
 }

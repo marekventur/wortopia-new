@@ -89,6 +89,7 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
                 <li className="navbar-text-item">
                   <span className="navbar-text">{displayName}</span>
                 </li>
+                <li className="hidden-xs"><a href="/einstellungen">Einstellungen</a></li>
                 <li>
                   <button type="button" className="btn btn-default navbar-btn btn-sm" style={{ marginRight: 8 }} onClick={() => { window.location.href = "/login"; }}>Anmelden</button>
                 </li>
@@ -110,7 +111,10 @@ export default function Nav({ session, size, initialPlayerCounts }: Props) {
                 <li className="visible-xs-block"><a href="#" onClick={(e) => { e.preventDefault(); submit(null, { method: "post", action: "/api/logout" }); }}>Logout</a></li>
               </>
             ) : (
-              <li className="visible-xs-block"><a href="/login">Anmelden</a></li>
+              <>
+                <li className="visible-xs-block"><a href="/einstellungen">Einstellungen</a></li>
+                <li className="visible-xs-block"><a href="/login">Anmelden</a></li>
+              </>
             )}
           </ul>
         </div>

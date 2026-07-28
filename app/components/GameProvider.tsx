@@ -3,6 +3,7 @@ import { useGameStore, type GameSize } from "../stores/gameStore";
 import { useChatStore } from "../stores/chatStore";
 import { useProposalStore } from "../stores/proposalStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { readStoredSettings } from "../localSettings";
 import type { WsIncomingMsg, WsEnrichResultMsg } from "../../lib/gameTypes.js";
 import type { Session } from "../../lib/session.js";
 
@@ -34,6 +35,13 @@ export default function GameProvider({ session, size, children }: Props) {
   }, [username]);
 
   useEffect(() => {
+    // Stored first: it is already here, so a guest's board size applies on the
+    // first paint instead of a round trip later, and a signed-in player stops
+    // seeing a flash of 100% on a slow connection.
+    const stored = readStoredSettings();
+    if (stored) useSettingsStore.getState().setSettings(stored);
+
+    // The account is the truth when there is one, so let the server win.
     if (session.type !== "user") return;
     fetch("/api/settings")
       .then((res) => res.ok ? res.json() : null)

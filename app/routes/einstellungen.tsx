@@ -1,35 +1,46 @@
+import { useEffect, useState, type FormEvent } from "react";
 import { redirect, Form, useNavigation } from "react-router";
 import Nav from "../components/Nav";
 import { getOrCreateSession } from "../../lib/session.js";
 import { getDb } from "../../lib/db.js";
+import { useSettingsStore } from "../stores/settingsStore";
+import {
+  DEFAULT_SETTINGS,
+  coerceSettings,
+  rowToSettings,
+  type Settings,
+  type SettingsRow,
+} from "../../lib/settings.js";
+import { readStoredSettings, writeStoredSettings } from "../localSettings";
 import type { Route } from "./+types/einstellungen";
 
-type WordListSort = "default" | "alpha" | "points";
-const VALID_SORTS: WordListSort[] = ["default", "alpha", "points"];
-const VALID_SCALES = [75, 90, 100, 115, 125, 150];
-
-type SettingsRow = { show_rotate: number; word_list_sort: string; high_contrast: number; board_scale: number };
-
-function rowToSettings(row: SettingsRow | undefined) {
-  return {
-    showRotate:    row ? row.show_rotate !== 0 : true,
-    wordListSort:  (row && VALID_SORTS.includes(row.word_list_sort as WordListSort)
-      ? row.word_list_sort : "default") as WordListSort,
-    highContrast:  row ? row.high_contrast !== 0 : false,
-    boardScale:    row && VALID_SCALES.includes(row.board_scale) ? row.board_scale : 100,
-  };
+/** The form reads the same way for both; only where it saves differs. */
+function settingsFromForm(form: FormData): Settings {
+  return coerceSettings({
+    showRotate: form.getAll("showRotate").includes("1"),
+    wordListSort: form.get("wordListSort"),
+    highContrast: form.getAll("highContrast").includes("1"),
+    boardScale: Number(form.get("boardScale") ?? DEFAULT_SETTINGS.boardScale),
+  });
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { session, cookieHeader } = await getOrCreateSession(request);
-  if (session.type !== "user") return redirect("/login");
 
-  const db = getDb();
-  const row = db
-    .prepare("SELECT show_rotate, word_list_sort, high_contrast, board_scale FROM user_settings WHERE user_id = ?")
-    .get(session.user.id) as SettingsRow | undefined;
+  // A guest's settings live in their browser, so the server has nothing to
+  // send: render the defaults and let the client fill in what it has stored.
+  const settings =
+    session.type === "user"
+      ? rowToSettings(
+          getDb()
+            .prepare(
+              "SELECT show_rotate, word_list_sort, high_contrast, board_scale FROM user_settings WHERE user_id = ?",
+            )
+            .get(session.user.id) as SettingsRow | undefined,
+        )
+      : DEFAULT_SETTINGS;
 
-  const payload = { session, settings: rowToSettings(row), saved: false };
+  const payload = { session, settings, saved: false };
   return cookieHeader
     ? Response.json(payload, { headers: { "Set-Cookie": cookieHeader } })
     : payload;
@@ -37,42 +48,62 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const { session } = await getOrCreateSession(request);
+  // Guests never reach this: the page saves their settings in the browser and
+  // does not submit. Anything arriving here has an account to save against.
   if (session.type !== "user") return redirect("/login");
 
-  const form = await request.formData();
-  const showRotate   = form.getAll("showRotate").includes("1");
-  const wordListSort = form.get("wordListSort") as string;
-  const highContrast = form.getAll("highContrast").includes("1");
-  const boardScale   = Number(form.get("boardScale") ?? 100);
+  const next = settingsFromForm(await request.formData());
 
-  if (!VALID_SORTS.includes(wordListSort as WordListSort)) {
-    return redirect("/einstellungen");
-  }
-  if (!VALID_SCALES.includes(boardScale)) {
-    return redirect("/einstellungen");
-  }
-
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO user_settings (user_id, show_rotate, word_list_sort, high_contrast, board_scale)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (user_id) DO UPDATE SET
-       show_rotate    = excluded.show_rotate,
-       word_list_sort = excluded.word_list_sort,
-       high_contrast  = excluded.high_contrast,
-       board_scale    = excluded.board_scale`,
-  ).run(session.user.id, showRotate ? 1 : 0, wordListSort, highContrast ? 1 : 0, boardScale);
+  getDb()
+    .prepare(
+      `INSERT INTO user_settings (user_id, show_rotate, word_list_sort, high_contrast, board_scale)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id) DO UPDATE SET
+         show_rotate    = excluded.show_rotate,
+         word_list_sort = excluded.word_list_sort,
+         high_contrast  = excluded.high_contrast,
+         board_scale    = excluded.board_scale`,
+    )
+    .run(
+      session.user.id,
+      next.showRotate ? 1 : 0,
+      next.wordListSort,
+      next.highContrast ? 1 : 0,
+      next.boardScale,
+    );
 
   return redirect("/einstellungen?saved=1");
 }
 
 export default function Einstellungen({ loaderData }: Route.ComponentProps) {
   const { session, settings } = loaderData;
+  const isGuest = session.type !== "user";
   const navigation = useNavigation();
   const saving = navigation.state === "submitting";
 
   const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
-  const saved = url?.searchParams.get("saved") === "1";
+  const [savedLocally, setSavedLocally] = useState(false);
+  const saved = savedLocally || url?.searchParams.get("saved") === "1";
+
+  // Read after mount, never during render: localStorage does not exist on the
+  // server, and reading it in render would hand React a different tree than the
+  // one it just hydrated. Re-keying the form swaps the defaults in.
+  const [stored, setStored] = useState<Settings | null>(null);
+  useEffect(() => {
+    if (isGuest) setStored(readStoredSettings());
+  }, [isGuest]);
+
+  const shown = stored ?? settings;
+
+  function handleGuestSave(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const next = settingsFromForm(new FormData(e.currentTarget));
+    writeStoredSettings(next);
+    // Apply straight away — the game is one tab click away and reads the store.
+    useSettingsStore.getState().setSettings(next);
+    setStored(next);
+    setSavedLocally(true);
+  }
 
   return (
     <>
@@ -82,7 +113,18 @@ export default function Einstellungen({ loaderData }: Route.ComponentProps) {
 
         {saved && <div className="alert alert-success">Einstellungen gespeichert.</div>}
 
-        <Form method="post">
+        {isGuest && (
+          <p className="text-muted">
+            Deine Einstellungen werden in diesem Browser gespeichert. Wenn du dich{" "}
+            <a href="/login">anmeldest</a>, gelten sie auf allen deinen Geräten.
+          </p>
+        )}
+
+        <Form
+          method="post"
+          key={stored ? "stored" : "initial"}
+          onSubmit={isGuest ? handleGuestSave : undefined}
+        >
           {/* Hidden fields carry unchecked checkbox values */}
           <input type="hidden" name="showRotate" value="0" />
           <input type="hidden" name="highContrast" value="0" />
@@ -94,7 +136,7 @@ export default function Einstellungen({ loaderData }: Route.ComponentProps) {
                   type="checkbox"
                   name="showRotate"
                   value="1"
-                  defaultChecked={settings.showRotate}
+                  defaultChecked={shown.showRotate}
                 />
                 {" "}Drehknopf anzeigen
               </label>
@@ -107,7 +149,7 @@ export default function Einstellungen({ loaderData }: Route.ComponentProps) {
               className="form-control"
               name="wordListSort"
               id="wordListSort"
-              defaultValue={settings.wordListSort}
+              defaultValue={shown.wordListSort}
             >
               <option value="default">Standard</option>
               <option value="alpha">Alphabetisch</option>
@@ -121,7 +163,7 @@ export default function Einstellungen({ loaderData }: Route.ComponentProps) {
               className="form-control"
               name="boardScale"
               id="boardScale"
-              defaultValue={settings.boardScale}
+              defaultValue={shown.boardScale}
             >
               <option value={75}>75%</option>
               <option value={90}>90%</option>
@@ -139,7 +181,7 @@ export default function Einstellungen({ loaderData }: Route.ComponentProps) {
                   type="checkbox"
                   name="highContrast"
                   value="1"
-                  defaultChecked={settings.highContrast}
+                  defaultChecked={shown.highContrast}
                 />
                 {" "}Hoher Kontrast (nur Spielfeld)
               </label>
