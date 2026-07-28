@@ -1,6 +1,6 @@
 import { data } from "react-router";
 import type { Route } from "./+types/api.auth.verify";
-import { hashCode, signVerifyToken, maskEmail } from "../../lib/auth.js";
+import { codesMatch, signVerifyToken, maskEmail } from "../../lib/auth.js";
 import { createSession, sessionCookie } from "../../lib/session.js";
 import { getDb } from "../../lib/db.js";
 
@@ -31,9 +31,9 @@ export async function action({ request }: Route.ActionArgs) {
   const db = getDb();
 
   const row = db
-    .prepare("SELECT code_hash, prev_code_hash, created_at, expires_at, attempts FROM email_codes WHERE email = ?")
+    .prepare("SELECT code, prev_code, sent_at, expires_at, attempts FROM email_codes WHERE email = ?")
     .get(email) as
-      | { code_hash: string; prev_code_hash: string | null; created_at: string; expires_at: string; attempts: number }
+      | { code: string; prev_code: string | null; sent_at: string; expires_at: string; attempts: number }
       | undefined;
 
   if (!row) {
@@ -41,12 +41,12 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "Kein Code gefunden. Bitte fordere einen neuen Code an." }, { status: 400 });
   }
 
-  const ageSeconds = Math.round((Date.now() - new Date(row.created_at).getTime()) / 1000);
+  const ageSeconds = Math.round((Date.now() - new Date(row.sent_at).getTime()) / 1000);
 
   // Check expiry
   if (new Date(row.expires_at).getTime() < Date.now()) {
     db.prepare("DELETE FROM email_codes WHERE email = ?").run(email);
-    console.log(`[auth] ${who} verify failed: code expired (issued ${ageSeconds}s ago)`);
+    console.log(`[auth] ${who} verify failed: code expired (last sent ${ageSeconds}s ago)`);
     return data({ error: "Der Code ist abgelaufen. Bitte fordere einen neuen Code an." }, { status: 400 });
   }
 
@@ -59,14 +59,15 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // Verify code
-  const submitted = hashCode(code);
-  if (submitted !== row.code_hash) {
+  if (!codesMatch(code, row.code)) {
     // The single most useful thing to know: was this the code from an earlier
-    // email? Only ever compared for the log — a superseded code never logs you in.
-    const superseded = row.prev_code_hash !== null && submitted === row.prev_code_hash;
+    // email? Only ever compared for the log — a superseded code never logs you
+    // in. Since a live code is now resent rather than replaced, this can only
+    // mean the email predates an expiry, not merely a "Code erneut senden".
+    const superseded = row.prev_code !== null && codesMatch(code, row.prev_code);
     const why = superseded
-      ? "code from an EARLIER email (a newer one was requested since)"
-      : `code did not match (${shape}, issued ${ageSeconds}s ago)`;
+      ? "code from an EARLIER email (the one it replaced had expired)"
+      : `code did not match (${shape}, last sent ${ageSeconds}s ago)`;
     console.log(`[auth] ${who} verify failed: ${why}, attempt ${row.attempts + 1}/${MAX_ATTEMPTS}`);
 
     const newAttempts = row.attempts + 1;
@@ -75,13 +76,14 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ error: "Zu viele Fehlversuche. Bitte fordere einen neuen Code an." }, { status: 400 });
     }
     db.prepare("UPDATE email_codes SET attempts = ? WHERE email = ?").run(newAttempts, email);
-    // Requesting a new code invalidates the previous one, so someone who asked
-    // twice and reaches for the first email gets "wrong code" for a code they
-    // copied perfectly. Say so rather than leaving them to guess.
+    // Several emails now normally carry the same code, so "take the newest one"
+    // is no longer the whole story — the only way to hold a dead code is for it
+    // to have expired in between. Say that instead.
     return data(
       {
         error:
-          "Falscher Code. Falls du mehrere Emails bekommen hast, nimm den Code aus der neuesten.",
+          "Falscher Code. Nimm den Code aus der neuesten Email — " +
+          "ältere Codes verfallen nach 10 Minuten.",
       },
       { status: 400 },
     );
@@ -116,7 +118,7 @@ export async function action({ request }: Route.ActionArgs) {
     .all(email) as Array<{ id: number; name: string; games: number; last_played: string | null }>;
 
   console.log(
-    `[auth] ${who} code accepted after ${ageSeconds}s, ${row.attempts} earlier failed attempt(s) ` +
+    `[auth] ${who} code accepted ${ageSeconds}s after it was last sent, ${row.attempts} earlier failed attempt(s) ` +
       `-> ${users.length === 0 ? "no account (offering signup)" : users.length === 1 ? "1 account" : users.length + " accounts (picker)"}`,
   );
 

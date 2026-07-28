@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { redirect } from "react-router";
 import Nav from "../components/Nav";
 import { getOrCreateSession } from "../../lib/session.js";
@@ -122,6 +122,14 @@ function EmailStep({ onNext }: { onNext: (email: string) => void }) {
   );
 }
 
+/**
+ * Seconds the resend link stays disabled. Matches RATE_LIMIT_SECONDS on the
+ * server, which is what actually enforces it — this only stops people pressing
+ * a button that cannot work yet. Someone waiting for an email that has not
+ * arrived will press it every two seconds for a solid minute otherwise.
+ */
+const RESEND_COOLDOWN_SECONDS = 60;
+
 function CodeStep({
   email,
   onBack,
@@ -135,6 +143,14 @@ function CodeStep({
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
+  // The code was just sent to get here, so the clock starts already running.
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -175,7 +191,14 @@ function CodeStep({
       if (!res.ok) {
         setResendMessage(json.error ?? "Fehler beim erneuten Senden.");
       } else {
-        setResendMessage("Ein neuer Code wurde gesendet.");
+        setCooldown(RESEND_COOLDOWN_SECONDS);
+        // Say it is the same code, so an email that arrives late does not look
+        // like the stale one of two.
+        setResendMessage(
+          json.resent
+            ? "Wir haben dir dieselbe Email noch einmal geschickt — der Code darin ist derselbe."
+            : "Ein neuer Code wurde gesendet.",
+        );
       }
     } catch {
       setResendMessage("Netzwerkfehler.");
@@ -211,9 +234,15 @@ function CodeStep({
       </button>
       <button type="button" className="btn btn-link" onClick={onBack}>Andere Email</button>
       <p style={{ marginTop: 12 }}>
-        <a href="#" onClick={(e) => { e.preventDefault(); handleResend(); }}>
-          {resending ? "..." : "Code erneut senden"}
-        </a>
+        {cooldown > 0 ? (
+          <span className="text-muted">
+            Die Email kann einen Moment dauern. Code erneut senden in {cooldown}s
+          </span>
+        ) : (
+          <a href="#" onClick={(e) => { e.preventDefault(); handleResend(); }}>
+            {resending ? "..." : "Code erneut senden"}
+          </a>
+        )}
       </p>
     </form>
   );

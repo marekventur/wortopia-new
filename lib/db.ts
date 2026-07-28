@@ -21,10 +21,24 @@ const SCHEMA = `
     CHECK (team IS NULL OR (length(team) >= 5 AND length(team) <= 12))
   );
 
+  -- The login code is kept in the clear, because "Code erneut senden" has to be
+  -- able to send the same one again — a resend that mints a new code kills the
+  -- email the player is holding, which is exactly how people ended up typing
+  -- correct-but-dead codes for days. Hashing it would only be worth something if
+  -- the plaintext were nowhere on the box, and it buys nothing next to
+  -- user_sessions.session_token, which sits here in the clear and is a live
+  -- credential. Codes are six digits, single-use, and deleted on success, on
+  -- expiry (lib/cleanup.ts) and after five wrong guesses.
   CREATE TABLE IF NOT EXISTS email_codes (
     email      TEXT PRIMARY KEY,
-    code_hash  TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    code       TEXT NOT NULL,
+    -- The code this one replaced. Never accepted for login, only compared
+    -- against so a failure can be reported as "you used an older email".
+    prev_code  TEXT,
+    -- When the code was last emailed, not when it was first made: a resend
+    -- pushes both this and expires_at forward, so the code stays alive for as
+    -- long as someone is actively asking for it.
+    sent_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     expires_at TEXT NOT NULL,
     attempts   INTEGER NOT NULL DEFAULT 0
   );
@@ -284,14 +298,29 @@ function migrateBoardScale(db: Database.Database): void {
 }
 
 /**
- * Keeps the code a request replaced, so a failed login can be positively
- * identified as "typed the code from an older email" instead of guessed at.
- * Never accepted for login — only ever compared against, to explain a failure.
+ * Brings email_codes to the shape above: codes in the clear so a resend can
+ * repeat one, and `sent_at` rather than `created_at` now that a resend moves it.
+ *
+ * The rows hold hashes, which cannot be turned back into something to email, so
+ * they go. At most a handful of logins are ever in flight; those people request
+ * a code again.
  */
-function migrateEmailCodePrevHash(db: Database.Database): void {
-  try {
-    db.prepare("ALTER TABLE email_codes ADD COLUMN prev_code_hash TEXT").run();
-  } catch {}
+function migrateEmailCodePlaintext(db: Database.Database): void {
+  const cols = (db.prepare("PRAGMA table_info(email_codes)").all() as { name: string }[])
+    .map(c => c.name);
+  if (cols.includes("code")) return;
+
+  db.transaction(() => {
+    db.prepare("DELETE FROM email_codes").run();
+    db.prepare("ALTER TABLE email_codes RENAME COLUMN code_hash TO code").run();
+    db.prepare("ALTER TABLE email_codes RENAME COLUMN created_at TO sent_at").run();
+    // prev_code_hash only exists on databases that saw the previous migration.
+    if (cols.includes("prev_code_hash")) {
+      db.prepare("ALTER TABLE email_codes RENAME COLUMN prev_code_hash TO prev_code").run();
+    } else {
+      db.prepare("ALTER TABLE email_codes ADD COLUMN prev_code TEXT").run();
+    }
+  })();
 }
 
 /**
@@ -348,7 +377,7 @@ export function getDb(): Database.Database {
     migrateUserSettings(db);
     migrateWordProposalReason(db);
     migrateBoardScale(db);
-    migrateEmailCodePrevHash(db);
+    migrateEmailCodePlaintext(db);
     migrateHiddenAccounts(db);
     migrateV1Claims(db);
   }

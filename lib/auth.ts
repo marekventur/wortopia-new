@@ -18,9 +18,13 @@ export function maskEmail(email: string): string {
   return `${local.slice(0, 2)}****${local.slice(-2)}${domain}`;
 }
 
-/** Hashes a 6-digit OTP code with SHA-256, returns hex string. */
-export function hashCode(code: string): string {
-  return crypto.createHash("sha256").update(code).digest("hex");
+/** Compares two login codes without leaking their difference through timing. */
+export function codesMatch(submitted: string, stored: string): boolean {
+  const a = Buffer.from(submitted);
+  const b = Buffer.from(stored);
+  // timingSafeEqual throws on length mismatch, so compare lengths first.
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 /** Signs a verify token proving ownership of an email address. Valid for 10 minutes. */
