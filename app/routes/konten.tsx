@@ -25,34 +25,34 @@ function formatLastPlayed(iso: string | null): string {
 
 export default function Konten({ loaderData }: Route.ComponentProps) {
   const { session, accounts, currentId } = loaderData;
+  // Logging in with more than one visible account lands here instead of in the
+  // game (see api.auth.verify). Hiding the ones you never use is what makes that
+  // stop, so say it here rather than leaving people to work it out.
+  const showsOnEveryLogin = accounts.filter((a) => !a.hidden).length > 1;
 
   return (
     <>
       <Nav session={session} />
       <div className="container" style={{ marginTop: 30, maxWidth: 640 }}>
         <h2>Deine Konten</h2>
-        <p className="text-muted">
-          Alle Namen, die zu deiner Email-Adresse gehören. Du bist mit dem zuletzt
-          benutzten angemeldet — du kannst wechseln, alte Namen ausblenden und
-          frühere Konten dazuholen. Ausgeblendete Namen tauchen beim Anmelden nicht
-          mehr auf.
-        </p>
+
+        {showsOnEveryLogin && (
+          <div className="alert alert-info">
+            Um diese Seite nicht jedes Mal zu sehen, blende alle unbenutzten
+            Spielernamen aus.
+          </div>
+        )}
 
         <AccountList accounts={accounts} currentId={currentId} />
-
-        {/* Logging in with several accounts on the address lands here rather
-            than in the game, so there has to be an obvious way onward. */}
-        <p style={{ marginTop: 20 }}>
-          <a href="/4" className="btn btn-primary">
-            Weiter zum Spiel
-          </a>
-        </p>
 
         <ClaimForm />
       </div>
     </>
   );
 }
+
+/** Enough blue to mark the row you are on, not enough to compete with a button. */
+const CURRENT_ROW_TINT = "#eef4fb";
 
 function AccountList({
   accounts,
@@ -63,6 +63,9 @@ function AccountList({
 }) {
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Someone with sixteen imported names has fifteen they will never use again;
+  // once hidden, those should not be half the page.
+  const [showHidden, setShowHidden] = useState(false);
 
   async function post(url: string, body: Record<string, string>, userId: number) {
     setBusy(userId);
@@ -85,60 +88,111 @@ function AccountList({
   const visible = accounts.filter((a) => !a.hidden);
   const hidden = accounts.filter((a) => a.hidden);
 
+  /**
+   * The row is the control: clicking one switches to it, clicking the one you
+   * are already on carries on into the game. A "Wechseln" button next to every
+   * name was fifteen buttons of noise for the person who has sixteen names —
+   * and the row they wanted was the only one without one.
+   */
+  function activate(account: ClaimableAccount) {
+    if (busy !== null) return;
+    if (account.id === currentId) {
+      window.location.href = "/4";
+      return;
+    }
+    post("/api/konten/switch", { userId: String(account.id) }, account.id);
+  }
+
   return (
     <>
       {error && <div className="alert alert-danger">{error}</div>}
 
       <ul className="list-group" style={{ marginTop: 20 }}>
-        {visible.map((account) => (
-          <li key={account.id} className="list-group-item">
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 200px" }}>
-                <strong>{account.name}</strong>
-                {account.id === currentId && (
-                  <span className="label label-success" style={{ marginLeft: 8 }}>
-                    angemeldet
-                  </span>
-                )}
-                <div className="text-muted" style={{ fontSize: "0.9em" }}>
-                  {account.games} Runden · {formatLastPlayed(account.lastPlayed)}
+        {visible.map((account) => {
+          const current = account.id === currentId;
+          return (
+            <li
+              key={account.id}
+              className="list-group-item"
+              role="button"
+              tabIndex={0}
+              aria-current={current || undefined}
+              onClick={() => activate(account)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  activate(account);
+                }
+              }}
+              style={{
+                cursor: busy === null ? "pointer" : "default",
+                backgroundColor: current ? CURRENT_ROW_TINT : undefined,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 200px" }}>
+                  <strong>{account.name}</strong>
+                  {current && (
+                    <span className="label label-success" style={{ marginLeft: 8 }}>
+                      angemeldet
+                    </span>
+                  )}
+                  <div className="text-muted" style={{ fontSize: "0.9em" }}>
+                    {account.games} Runden · {formatLastPlayed(account.lastPlayed)}
+                  </div>
                 </div>
-              </div>
 
-              {account.id !== currentId && (
-                <>
-                  <button
-                    type="button"
+                {current ? (
+                  // A real link, so it can be opened in a tab like any other —
+                  // the row click does the same thing for everyone else.
+                  <a
+                    href="/4"
                     className="btn btn-primary btn-sm"
-                    disabled={busy !== null}
-                    onClick={() => post("/api/konten/switch", { userId: String(account.id) }, account.id)}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    Wechseln
-                  </button>
+                    Weiter zum Spiel
+                  </a>
+                ) : (
                   <button
                     type="button"
                     className="btn btn-default btn-sm"
                     disabled={busy !== null}
-                    onClick={() =>
+                    onClick={(e) => {
+                      e.stopPropagation();
                       post(
                         "/api/konten/hide",
                         { userId: String(account.id), hidden: "true" },
                         account.id,
-                      )
-                    }
+                      );
+                    }}
                   >
                     Ausblenden
                   </button>
-                </>
-              )}
-            </div>
-          </li>
-        ))}
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       {hidden.length > 0 && (
+        <p style={{ marginTop: 16 }}>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setShowHidden((shown) => !shown);
+            }}
+          >
+            {showHidden
+              ? "Ausgeblendete Konten verbergen"
+              : `Ausgeblendete Konten anzeigen (${hidden.length})`}
+          </a>
+        </p>
+      )}
+
+      {hidden.length > 0 && showHidden && (
         <>
-          <h4 style={{ marginTop: 30 }}>Ausgeblendet</h4>
           <p className="text-muted" style={{ fontSize: "0.9em" }}>
             Diese Namen erscheinen beim Anmelden nicht mehr. Nichts ist gelöscht — alle
             Runden bleiben erhalten.
@@ -181,6 +235,9 @@ function ClaimForm() {
   const [error, setError] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Most people who land here have every name they own already listed. The form
+  // is for the ones who don't, so it starts out of the way.
+  const [open, setOpen] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -207,48 +264,67 @@ function ClaimForm() {
   }
 
   return (
-    <div style={{ marginTop: 40 }}>
-      <h4>Früheren Namen dazuholen</h4>
-      <p className="text-muted">
-        Hattest du früher einen anderen Namen, der jetzt nicht mehr angeboten wird? Beim
-        alten Wortopia hast du dich mit Name und Passwort angemeldet. Gib beides ein, und
-        der Name zieht auf deine Email-Adresse um.
-      </p>
+    <div style={{ marginTop: 8 }}>
+      {!open && (
+        <p>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setOpen(true);
+            }}
+          >
+            Wortopia-V1-Account mit Passwort hinzufügen
+          </a>
+        </p>
+      )}
 
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="claim-username">Alter Name</label>
-          <input
-            id="claim-username"
-            name="username"
-            className="form-control"
-            autoComplete="username"
-            required
-          />
+      {open && (
+        <div style={{ marginTop: 24 }}>
+          <h4>Wortopia-V1-Account hinzufügen</h4>
+          <p className="text-muted">
+            Hattest du früher einen anderen Namen, der jetzt nicht mehr angeboten wird?
+            Beim alten Wortopia hast du dich mit Name und Passwort angemeldet. Gib beides
+            ein, und der Name zieht auf deine Email-Adresse um.
+          </p>
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label htmlFor="claim-username">Alter Name</label>
+              <input
+                id="claim-username"
+                name="username"
+                className="form-control"
+                autoComplete="username"
+                required
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="claim-password">Altes Passwort</label>
+              <input
+                id="claim-password"
+                name="password"
+                type="password"
+                className="form-control"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            {error && <div className="alert alert-danger">{error}</div>}
+            {claimed && (
+              <div className="alert alert-success">
+                „{claimed}“ gehört jetzt zu deiner Email-Adresse.
+              </div>
+            )}
+
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? "Moment…" : "Konto dazuholen"}
+            </button>
+          </form>
         </div>
-        <div className="form-group">
-          <label htmlFor="claim-password">Altes Passwort</label>
-          <input
-            id="claim-password"
-            name="password"
-            type="password"
-            className="form-control"
-            autoComplete="current-password"
-            required
-          />
-        </div>
-
-        {error && <div className="alert alert-danger">{error}</div>}
-        {claimed && (
-          <div className="alert alert-success">
-            „{claimed}“ gehört jetzt zu deiner Email-Adresse.
-          </div>
-        )}
-
-        <button type="submit" className="btn btn-primary" disabled={loading}>
-          {loading ? "Moment…" : "Konto dazuholen"}
-        </button>
-      </form>
+      )}
     </div>
   );
 }
