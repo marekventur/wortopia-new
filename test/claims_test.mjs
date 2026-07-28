@@ -120,6 +120,45 @@ try {
       "me@example.com",
   );
 
+  // The message that sent a player to support for an account they already had:
+  // a name moved onto their address by hand has no claim row left, so the form
+  // used to answer "no such old account with a password".
+  console.log(`${C.bold}a name that is already yours${C.reset}`);
+  const attemptsBefore = () =>
+    db.prepare("SELECT attempts FROM claim_attempts WHERE email = ?").get("me@example.com")
+      ?.attempts ?? 0;
+  const beforeOwn = attemptsBefore();
+  const own = await claimAccount("NeuerName", "egal", "me@example.com");
+  check("still refused", own.ok === false);
+  check(
+    "but told it is theirs, and where",
+    /gehört bereits zu deiner Email-Adresse/.test(own.error) && /in der Liste/.test(own.error),
+    JSON.stringify(own.error),
+  );
+  check(
+    "not counted against the claim allowance",
+    attemptsBefore() === beforeOwn,
+    `${beforeOwn} -> ${attemptsBefore()}`,
+  );
+  check("matched case-insensitively", /gehört bereits/.test((await claimAccount("neuername", "egal", "me@example.com")).error));
+
+  db.prepare("UPDATE users SET hidden_at = ? WHERE id = ?").run(new Date().toISOString(), ids.mine);
+  const ownHidden = await claimAccount("NeuerName", "egal", "me@example.com");
+  check(
+    "a hidden one points at the toggle instead of the list",
+    /ausgeblendet/.test(ownHidden.error) && !/in der Liste/.test(ownHidden.error),
+    JSON.stringify(ownHidden.error),
+  );
+  db.prepare("UPDATE users SET hidden_at = NULL WHERE id = ?").run(ids.mine);
+
+  check(
+    "someone else's claimed name still gives nothing away",
+    /kein altes Konto mit Passwort/.test(
+      (await claimAccount("NeuerName", "egal", "stranger@example.com")).error,
+    ),
+  );
+  db.prepare("DELETE FROM claim_attempts").run();
+
   console.log(`${C.bold}rate limiting${C.reset}`);
   // Per-account lock: 5 wrong tries against the same nick.
   let lastError = null;

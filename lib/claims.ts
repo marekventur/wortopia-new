@@ -44,6 +44,18 @@ export type ClaimableAccount = {
   hidden: boolean;
 };
 
+/**
+ * What to say when someone asks for a name that is already on their address.
+ * Points at where it is rather than just denying the request — hidden accounts
+ * are behind a toggle on /konten, so saying "look in the list" would be wrong.
+ */
+function alreadyYours(name: string, hidden: boolean): string {
+  return hidden
+    ? `„${name}“ gehört bereits zu deiner Email-Adresse, ist aber ausgeblendet. ` +
+        `Du kannst den Namen oben unter „Ausgeblendete Konten anzeigen“ wieder einblenden.`
+    : `„${name}“ gehört bereits zu deiner Email-Adresse — du findest den Namen oben in der Liste.`;
+}
+
 /** Is this name an imported account that can still be claimed with a password? */
 export function isClaimable(username: string): boolean {
   const row = getDb()
@@ -164,17 +176,37 @@ export async function claimAccount(
   };
 
   if (!account) {
+    // A name with no claim row is usually one that already sits on an address.
+    // When that address is the caller's own — because they were moved by hand,
+    // or claimed it earlier — "there is no such account" is not just unhelpful,
+    // it is the opposite of the truth, and it is what sends people to support
+    // for an account they already have.
+    const mine = db
+      .prepare(
+        `SELECT u.name, u.hidden_at
+         FROM users u
+         JOIN user_emails e ON e.user_id = u.id
+         WHERE u.name = ? COLLATE NOCASE AND e.email = ?`
+      )
+      .get(username, email) as { name: string; hidden_at: string | null } | undefined;
+
+    if (mine) {
+      console.log(`[claims] ${who} tried to claim "${mine.name}", which is already theirs`);
+      // Not counted as a claim attempt: it is their own account, not a guess.
+      return { ok: false, status: 400, error: alreadyYours(mine.name, mine.hidden_at !== null) };
+    }
+
     recordClaimerAttempt(email);
     console.log(`[claims] ${who} tried to claim "${username}": no claimable account`);
     return notClaimable;
   }
 
   if (account.current_email === email) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Dieses Konto gehört bereits zu deiner Email-Adresse.",
-    };
+    // Same case as above, for a name that still carries its old password.
+    const hidden = db
+      .prepare("SELECT hidden_at FROM users WHERE id = ?")
+      .get(account.id) as { hidden_at: string | null };
+    return { ok: false, status: 400, error: alreadyYours(account.name, hidden.hidden_at !== null) };
   }
 
   if (account.locked_until && new Date(account.locked_until).getTime() > Date.now()) {
