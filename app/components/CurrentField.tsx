@@ -46,6 +46,29 @@ export default function CurrentField() {
   const [chain, setChain] = useState<Cell[]>([]);
   const [wordEntered, setWordEntered] = useState('');
   const [wordEnteredClass, setWordEnteredClass] = useState('');
+  const [tickHighlight, setTickHighlight] = useState(false);
+  const [crossHighlight, setCrossHighlight] = useState(false);
+
+  /**
+   * Flash a tick or a cross over the board — on phones and small tablets only.
+   *
+   * It used to show everywhere and was the single loudest complaint in the
+   * survey, because on a wide screen the guess list is right there in green and
+   * red. Below 992px that list is not rendered at all (MainAreaPositioner is
+   * hidden-xs hidden-sm), which left phone players with no answer whatsoever to
+   * "did that count?". Hidden by the same breakpoint, so the two can never
+   * disagree.
+   */
+  useEffect(() => {
+    if (!lastGuessResult) return;
+    const correct = lastGuessResult.result === 'correct';
+    if (!correct && lastGuessResult.result === 'cooldown') return;
+
+    const setHighlight = correct ? setTickHighlight : setCrossHighlight;
+    setHighlight(true);
+    const timer = setTimeout(() => setHighlight(false), 600);
+    return () => clearTimeout(timer);
+  }, [lastGuessResult?.ts]);
 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -426,6 +449,10 @@ export default function CurrentField() {
               ))}
             </tbody>
           </table>
+
+          {/* hidden-md hidden-lg: exactly where the guess list is missing. */}
+          <div className={`giant-tick hidden-md hidden-lg${tickHighlight ? ' highlight' : ''}`}>✓</div>
+          <div className={`giant-cross hidden-md hidden-lg${crossHighlight ? ' highlight' : ''}`}>✗</div>
 
           <canvas
             ref={canvasRef}
