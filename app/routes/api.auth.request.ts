@@ -10,11 +10,50 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
 
-  if (!email || !email.includes("@")) {
+  if (!email) {
     return data({ error: "Bitte gib eine gültige Email-Adresse ein." }, { status: 400 });
   }
 
   const db = getDb();
+
+  // Login on the old site was player name + password, so the name is what
+  // people reach for first. The field used to be type="email", which meant the
+  // browser refused to submit "asteramie" and nothing ever reached the server —
+  // the only trace it left anywhere was the occasional "gibt es da noch einen
+  // Zugang?" email. Those attempts now arrive here, get counted, and are told
+  // what to type instead.
+  if (!email.includes("@")) {
+    // Only log the name when it belongs to a real account: then the line says
+    // who is locked out and which address their code would go to, which is
+    // worth acting on. Anything else is unidentified text typed into a login
+    // form — it could be a password — and stays out of the log.
+    const account = db
+      .prepare(
+        `SELECT u.name, e.email
+         FROM users u
+         LEFT JOIN user_emails e ON e.user_id = u.id
+         WHERE u.name = ? COLLATE NOCASE`
+      )
+      .get(email) as { name: string; email: string | null } | undefined;
+
+    console.log(
+      account
+        ? `[auth] player name "${account.name}" entered instead of an email address ` +
+            `(that account is on ${account.email ? maskEmail(account.email) : "no address"})`
+        : `[auth] not an email address, and no account by that name (${email.length} chars)`
+    );
+
+    // Worded the same either way: saying which names exist would turn this into
+    // a way to enumerate accounts.
+    return data(
+      {
+        error:
+          "Bitte benutze deine Email-Adresse, nicht deinen Spielernamen — " +
+          "wir schicken dir einen Code dorthin.",
+      },
+      { status: 400 }
+    );
+  }
 
   // Rate limit: check if a code was sent within the last 60 seconds
   const existing = db

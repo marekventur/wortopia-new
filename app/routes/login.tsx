@@ -98,7 +98,22 @@ function EmailStep({ onNext }: { onNext: (email: string) => void }) {
       <p>Gib deine Email-Adresse ein. Wir senden dir einen 6-stelligen Code.</p>
       <div className="form-group">
         <label htmlFor="email">Email-Adresse</label>
-        <input type="email" className="form-control" name="email" id="email" placeholder="name@adresse.de" required autoFocus />
+        {/* Deliberately not type="email". On the old site you logged in with
+            your player name, so that is what many people type here — and a
+            browser that silently refuses to submit "asteramie" teaches them
+            nothing and tells us nothing. Let it through and let the server say
+            what to type instead. */}
+        <input
+          type="text"
+          inputMode="email"
+          autoComplete="email"
+          className="form-control"
+          name="email"
+          id="email"
+          placeholder="name@adresse.de"
+          required
+          autoFocus
+        />
       </div>
       <button type="submit" className="btn btn-primary" disabled={loading}>
         {loading ? "..." : "Code senden"}
