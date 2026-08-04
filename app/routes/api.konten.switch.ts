@@ -39,6 +39,6 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "Dieses Konto gehört nicht zu deiner Email-Adresse." }, { status: 403 });
   }
 
-  const cookieHeader = await sessionCookie.serialize(await createSession(userId));
+  const cookieHeader = await sessionCookie.serialize(await createSession(userId, "switch"));
   return data({ ok: true }, { headers: { "Set-Cookie": cookieHeader } });
 }

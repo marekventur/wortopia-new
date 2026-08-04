@@ -60,7 +60,7 @@ export async function action({ request }: Route.ActionArgs) {
       return data({ error: claim.error, claimable: true }, { status: claim.status });
     }
 
-    const claimCookie = await sessionCookie.serialize(await createSession(claim.userId));
+    const claimCookie = await sessionCookie.serialize(await createSession(claim.userId, "claim"));
     return data(
       { ok: true, claimed: true, username: claim.username },
       { headers: { "Set-Cookie": claimCookie } },
@@ -107,6 +107,11 @@ export async function action({ request }: Route.ActionArgs) {
     }
     throw err;
   }
+
+  // Not via createSession: the session row is written inside the transaction
+  // above so an account can never exist without one. Logged here so the session
+  // log covers every way a session comes into being.
+  console.log(`[session] new session for "${username}" (register), 0 earlier session(s)`);
 
   const cookieHeader = await sessionCookie.serialize(token);
   return data({ ok: true }, { headers: { "Set-Cookie": cookieHeader } });
