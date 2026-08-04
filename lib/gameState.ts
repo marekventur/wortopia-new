@@ -1,9 +1,9 @@
 import { ROUND_DURATION, GAME_DURATION, SCORES } from "./gameConfig.js";
 import { getDb } from "./db.js";
 import { maskName } from "./profanity.js";
-import type { WordDetail, LastRoundResults } from "./gameTypes.js";
+import type { WordDetail, LastRoundResults, TeamResult } from "./gameTypes.js";
 
-export type { WordDetail, LastRoundResults };
+export type { WordDetail, LastRoundResults, TeamResult };
 
 export type RoundPhase = "ongoing" | "cooldown";
 
@@ -53,23 +53,36 @@ export type PlayerResult = {
 
 export type RoundResults = {
   players: PlayerResult[];
+  teams: TeamResult[];
   /** All correct words found by anyone, with who found them */
   words: { word: string; username: string }[];
 };
 
 /**
- * Aggregates a list of guess rows into a results object.
- * If `forUserId` is supplied, only that user's data is included in `words`
- * (but all players appear in the leaderboard).
+ * Players and teams from one round's guesses.
+ *
+ * A team scores the *union* of the words its members found, not the sum of
+ * their points: if both partners find HAUS it counts once. That is how the old
+ * site scored teams and it is the whole point of playing as one — the number
+ * answers "what did we cover together", so covering the same ground twice does
+ * not flatter it.
+ *
+ * A team only appears once at least two of its members are in the round.
+ * Someone playing alone is just a player, with no team shown, because a team of
+ * one is a scoreboard entry that duplicates the row beneath it.
  */
-export function buildResults(
-  guesses: GuessRow[],
-  forUserId?: number,
-): RoundResults {
+function aggregate(guesses: GuessRow[]): { players: PlayerResult[]; teams: TeamResult[] } {
   const playerMap = new Map<number, PlayerResult>();
+  // Keyed case-insensitively: users.team is COLLATE NOCASE, so "Watzmann" and
+  // "watzmann" are one team in the database and must be one here too.
+  const teamMap = new Map<
+    string,
+    { name: string; members: Set<number>; words: Map<string, number> }
+  >();
 
   for (const g of guesses) {
     if (g.result !== "correct") continue;
+
     if (!playerMap.has(g.user_id)) {
       playerMap.set(g.user_id, {
         userId: g.user_id,
@@ -82,9 +95,46 @@ export function buildResults(
     const p = playerMap.get(g.user_id)!;
     p.words++;
     p.points += g.points;
+
+    if (!g.team) continue;
+    const key = g.team.toLowerCase();
+    let team = teamMap.get(key);
+    if (!team) {
+      team = { name: maskName(g.team), members: new Set(), words: new Map() };
+      teamMap.set(key, team);
+    }
+    team.members.add(g.user_id);
+    // First finder wins the entry; the score depends on the word, not on who
+    // typed it, so a second finder adds nothing.
+    const word = g.word.toLowerCase();
+    if (!team.words.has(word)) team.words.set(word, g.points);
   }
 
-  const players = [...playerMap.values()].sort((a, b) => b.points - a.points);
+  const byPoints = (a: { points: number }, b: { points: number }) => b.points - a.points;
+
+  const teams: TeamResult[] = [...teamMap.values()]
+    .filter((t) => t.members.size > 1)
+    .map((t) => ({
+      name: t.name,
+      memberIds: [...t.members],
+      words: t.words.size,
+      points: [...t.words.values()].reduce((sum, n) => sum + n, 0),
+    }))
+    .sort(byPoints);
+
+  return { players: [...playerMap.values()].sort(byPoints), teams };
+}
+
+/**
+ * Aggregates a list of guess rows into a results object.
+ * If `forUserId` is supplied, only that user's data is included in `words`
+ * (but all players appear in the leaderboard).
+ */
+export function buildResults(
+  guesses: GuessRow[],
+  forUserId?: number,
+): RoundResults {
+  const { players, teams } = aggregate(guesses);
 
   const words =
     forUserId !== undefined
@@ -95,7 +145,7 @@ export function buildResults(
           .filter((g) => g.result === "correct")
           .map((g) => ({ word: g.word, username: maskName(g.username) }));
 
-  return { players, words };
+  return { players, teams, words };
 }
 
 /**
@@ -151,17 +201,7 @@ export function buildLastRoundResults(
   validWords: Set<string>,
 ): LastRoundResults {
   // ── Leaderboard (same as buildResults) ────────────────────────────────────
-  const playerMap = new Map<number, PlayerResult>();
-  for (const g of guesses) {
-    if (g.result !== "correct") continue;
-    if (!playerMap.has(g.user_id)) {
-      playerMap.set(g.user_id, { userId: g.user_id, username: maskName(g.username), team: maskName(g.team), words: 0, points: 0 });
-    }
-    const p = playerMap.get(g.user_id)!;
-    p.words++;
-    p.points += g.points;
-  }
-  const players = [...playerMap.values()].sort((a, b) => b.points - a.points);
+  const { players, teams } = aggregate(guesses);
 
   // ── Per-word guess map: word → userId[] ────────────────────────────────────
   const guessedByMap = new Map<string, number[]>();
@@ -196,5 +236,5 @@ export function buildLastRoundResults(
     (a, b) => b.guessedBy.length - a.guessedBy.length || a.word.localeCompare(b.word),
   );
 
-  return { players, words };
+  return { players, teams, words };
 }

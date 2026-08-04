@@ -17,8 +17,21 @@ export type PlayerResult = {
   points: number;
 };
 
+/**
+ * A team that has at least two members in the round. Its score is the union of
+ * the words they found between them, so a word both of them got counts once.
+ */
+export type TeamResult = {
+  name: string;
+  /** Whose rows sit under this team in the result list. */
+  memberIds: number[];
+  words: number;
+  points: number;
+};
+
 export type RoundResults = {
   players: PlayerResult[];
+  teams: TeamResult[];
   /** Current round only: the requesting player's own correct words. */
   words: { word: string; username: string }[];
 };
@@ -34,6 +47,7 @@ export type WordDetail = {
 
 export type LastRoundResults = {
   players: PlayerResult[];
+  teams: TeamResult[];
   /** ALL valid words for the field, sorted most-guessed → least-guessed. */
   words: WordDetail[];
 };

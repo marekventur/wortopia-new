@@ -217,6 +217,35 @@ assert(results.words.length === 3,                      `3 correct words total`)
 const filteredResults = buildResults(sampleGuesses, 1);
 assert(filteredResults.words.length === 2,              `Filtered: only Alice's words`);
 assert(filteredResults.players.length === 2,            `Filtered: still shows all players`);
+assert(results.teams.length === 0,                      `No teams when nobody has one`);
+
+// Teams: the score is the union of what the members found, not the sum. Both
+// finding the same word must count once — that is the whole point of the team
+// number, and a sum would quietly reward duplicated effort.
+const teamGuesses = [
+  { user_id: 1, username: "Fabula", team: "Watzmann", word: "haus", result: "correct", points: 1 },
+  { user_id: 1, username: "Fabula", team: "Watzmann", word: "ein",  result: "correct", points: 1 },
+  { user_id: 2, username: "Usagi",  team: "watzmann", word: "haus", result: "correct", points: 1 },
+  { user_id: 2, username: "Usagi",  team: "watzmann", word: "tier", result: "correct", points: 3 },
+  { user_id: 3, username: "Solo",   team: "Einsam",   word: "hut",  result: "correct", points: 9 },
+  { user_id: 4, username: "Gast",   team: null,       word: "tor",  result: "correct", points: 1 },
+];
+const teamResults = buildResults(teamGuesses);
+assert(teamResults.teams.length === 1,                  `Only the team with two members present`);
+const watzmann = teamResults.teams[0];
+assert(watzmann.name === "Watzmann",                    `Team keeps its first-seen spelling`);
+assert(watzmann.memberIds.length === 2,                 `Two members`);
+assert(watzmann.words === 3,                            `Union is haus, ein, tier — not 4`);
+assert(watzmann.points === 5,                           `Union scores 5, a sum would say 6`);
+assert(teamResults.players.length === 4,                `Every player still listed individually`);
+assert(
+  teamResults.players.find(p => p.username === "Fabula").points === 2,
+  `Members keep their own scores`,
+);
+assert(
+  !teamResults.teams.some(t => t.name === "Einsam"),
+  `A team of one is not a team`,
+);
 
 // ── 4. computeValidWords ──────────────────────────────────────────────────────
 section("computeValidWords (DB pipeline)");
