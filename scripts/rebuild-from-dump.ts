@@ -437,8 +437,30 @@ function mergeV2(dbPath: string): void {
       }
     }
 
+    // Chat comes along too. Nothing else deletes it, so the table is the only
+    // record of what players said — and that is where they report what is
+    // broken, weeks before it reaches a survey. Dropping it here was the one
+    // thing that made the history start over at every sync.
+    const insChat = db.prepare(
+      `INSERT OR IGNORE INTO chat_messages (user_id, username, message, size, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    let chatKept = 0;
+    for (const m of v2.prepare(
+      "SELECT user_id, username, message, size, created_at FROM chat_messages",
+    ).all() as Record<string, number | string>[]) {
+      const userId = m.user_id as number;
+      // Guests have negative ids, are not in users, and there is no foreign key
+      // on this table — they carry over as they are.
+      const target = userId < 0 ? userId : idMap.get(userId);
+      if (target !== undefined) {
+        insChat.run(target, m.username, m.message, m.size, m.created_at);
+        chatKept++;
+      }
+    }
+
     console.log(`  ${moved} results moved` + (collided ? `, ${collided} already present` : "") +
-      `, ${sessions} live session(s) kept`);
+      `, ${sessions} live session(s) kept, ${chatKept} chat message(s) kept`);
   })();
 
   // The mapping is the part worth a human glance, so print all of it.
