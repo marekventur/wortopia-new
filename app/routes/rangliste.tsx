@@ -3,6 +3,7 @@ import Nav from "../components/Nav";
 import { getOrCreateSession } from "../../lib/session.js";
 import { getDb } from "../../lib/db.js";
 import { maskName } from "../../lib/profanity.js";
+import { computeLeaderboard } from "../../lib/leaderboardCache.js";
 
 type LeaderboardRow = {
   rank: number;
@@ -31,6 +32,26 @@ const SORT_OPTIONS = {
 
 type SortKey = keyof typeof SORT_OPTIONS;
 
+/** Windows computed per request instead of read from the nightly cache. */
+const LIVE_DAYS = new Set([1]);
+
+/**
+ * The live equivalent of SORT_OPTIONS, tie-breakers included — the same player
+ * has to land on the same rank whether the row came from the cache or not.
+ */
+type Sortable = { pct: number; games: number; avg_words: number; best_round: number };
+
+const LIVE_SORT: Record<SortKey, (a: Sortable, b: Sortable) => number> = {
+  pct:        (a, b) => b.pct - a.pct || b.games - a.games,
+  games:      (a, b) => b.games - a.games || b.pct - a.pct,
+  avg_words:  (a, b) => b.avg_words - a.avg_words || b.pct - a.pct,
+  best_round: (a, b) => b.best_round - a.best_round || b.pct - a.pct,
+};
+
+function sortLive<T extends Sortable>(rows: T[], sortBy: SortKey): T[] {
+  return [...rows].sort(LIVE_SORT[sortBy] ?? LIVE_SORT.pct);
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const { session, cookieHeader } = await getOrCreateSession(request);
 
@@ -46,20 +67,38 @@ export async function loader({ request }: Route.LoaderArgs) {
   // without a cache rebuild. Include logged-in user even if outside top 100.
   const loggedInName = session.type === "user" ? session.user.name : null;
 
-  const leaderboard = db.prepare(`
-    WITH ranked AS (
-      SELECT name, team, games, pct, avg_words, best_round, generated_at,
-             ROW_NUMBER() OVER (ORDER BY ${orderExpr}) AS rank
-      FROM leaderboard_cache
-      WHERE days = ? AND size = ?
-    )
-    SELECT rank, name, team, games, pct, avg_words, best_round, generated_at
-    FROM ranked
-    WHERE rank <= 100 OR name = ?
-    ORDER BY rank ASC
-  `).all(days, size, loggedInName) as (LeaderboardRow & { generated_at: string })[];
+  // The 24-hour board is computed per request rather than read from the cache.
+  // It is the one window where a cached answer is the wrong answer — refreshed
+  // nightly it showed the day that ended at 3am, so nothing played today
+  // appeared at all, which is what players meant by missing the "Live-Rangliste".
+  // Affordable because user_results is indexed on `finished`: ~1ms for a day.
+  // The longer windows barely move overnight and stay cached.
+  const live = LIVE_DAYS.has(days);
 
-  const generatedAt = leaderboard[0]?.generated_at ?? null;
+  const rows = live
+    ? computeLeaderboard(days, size).map((row, i) => ({ ...row, rank: i + 1, generated_at: null }))
+    : (db.prepare(`
+        WITH ranked AS (
+          SELECT name, team, games, pct, avg_words, best_round, generated_at,
+                 ROW_NUMBER() OVER (ORDER BY ${orderExpr}) AS rank
+          FROM leaderboard_cache
+          WHERE days = ? AND size = ?
+        )
+        SELECT rank, name, team, games, pct, avg_words, best_round, generated_at
+        FROM ranked
+        WHERE rank <= 100 OR name = ?
+        ORDER BY rank ASC
+      `).all(days, size, loggedInName) as (LeaderboardRow & { generated_at: string })[]);
+
+  // Ranking and the "keep my row even outside the top 100" rule are applied in
+  // SQL for the cached path; the live path is a plain array, so do the same here.
+  const leaderboard = live
+    ? sortLive(rows as (LeaderboardRow & { generated_at: string | null })[], sortBy)
+        .map((row, i) => ({ ...row, rank: i + 1 }))
+        .filter((row) => row.rank <= 100 || row.name === loggedInName)
+    : (rows as (LeaderboardRow & { generated_at: string })[]);
+
+  const generatedAt = live ? null : leaderboard[0]?.generated_at ?? null;
 
   // Mask after querying — the query has to match the real name to pull the
   // logged-in user's row in from outside the top 100. loggedInName is masked
@@ -246,6 +285,7 @@ export default function Rangliste({ loaderData }: Route.ComponentProps) {
         )}
         <p style={{ color: "#888", fontSize: "0.9em" }}>
           Top 100 · geordnet nach {SORT_LABELS[sortBy] ?? "Ergebnis"}
+          {LIVE_DAYS.has(days) && <> · live</>}
           {generatedAt && (
             <> · Stand: {new Date(generatedAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</>
           )}

@@ -298,6 +298,33 @@ function migrateBoardScale(db: Database.Database): void {
 }
 
 /**
+ * An index leading with `finished`, so a leaderboard window can be seeked
+ * rather than scanned.
+ *
+ * user_results_leaderboard leads with user_id, which is right for "one player's
+ * history" and useless for "everyone in the last day": SQLite scanned all 3.9
+ * million entries every time, ~370ms per window. With this index the 24-hour
+ * board drops to ~1ms, which is what makes it affordable to compute live
+ * instead of once a night.
+ *
+ * ANALYZE is not optional here. Without the statistics SQLite sticks with the
+ * old covering index and the new one is never used — measured, not assumed. It
+ * takes about three seconds on the live database and runs once, when the index
+ * is first created.
+ */
+function migrateLeaderboardFinishedIndex(db: Database.Database): void {
+  const exists = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?")
+    .get("user_results_finished");
+  if (exists) return;
+
+  console.log("[db] Building user_results_finished (one-off, a few seconds)...");
+  db.prepare("CREATE INDEX user_results_finished ON user_results (finished)").run();
+  db.prepare("ANALYZE").run();
+  console.log("[db] user_results_finished ready.");
+}
+
+/**
  * Brings email_codes to the shape above: codes in the clear so a resend can
  * repeat one, and `sent_at` rather than `created_at` now that a resend moves it.
  *
@@ -378,6 +405,7 @@ export function getDb(): Database.Database {
     migrateWordProposalReason(db);
     migrateBoardScale(db);
     migrateEmailCodePlaintext(db);
+    migrateLeaderboardFinishedIndex(db);
     migrateHiddenAccounts(db);
     migrateV1Claims(db);
   }
