@@ -298,6 +298,20 @@ function migrateBoardScale(db: Database.Database): void {
 }
 
 /**
+ * When a proposal actually reached spielwoerter.de.
+ *
+ * The bridge POSTed and never looked at the answer, so six weeks of 401s went
+ * unnoticed and ~540 finalized proposals were dropped on the floor. Recording
+ * delivery makes "what never arrived" a query rather than an archaeology
+ * project, and lets a backfill run twice without sending anything twice.
+ */
+function migrateProposalDeliveryMarker(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE word_proposals ADD COLUMN synced_to_spielwoerter_at TEXT").run();
+  } catch {}
+}
+
+/**
  * An index leading with `finished`, so a leaderboard window can be seeked
  * rather than scanned.
  *
@@ -406,6 +420,7 @@ export function getDb(): Database.Database {
     migrateBoardScale(db);
     migrateEmailCodePlaintext(db);
     migrateLeaderboardFinishedIndex(db);
+    migrateProposalDeliveryMarker(db);
     migrateHiddenAccounts(db);
     migrateV1Claims(db);
   }

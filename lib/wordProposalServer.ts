@@ -286,31 +286,84 @@ export class WordProposalServer extends EventEmitter {
       this.proposedWords.delete(row.word.toLowerCase());
 
       if (status !== "rejected" && process.env.NODE_ENV === "production") {
-        const key = process.env.SPIELWOERTER_API_KEY ?? "";
-        const spielwoerterAction = row.action === "remove" ? "remove" : "upsert";
-        void fetch(SPIELWOERTER_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-API-Key": key },
-          body: JSON.stringify({
-            suggestions: [
-              {
-                word: row.word,
-                action: spielwoerterAction,
-                author_email: `user-${row.user_id}@wortopia.de`,
-                ...(spielwoerterAction === "upsert" && {
-                  payload: {
-                    ...(row.description && { description: row.description }),
-                    ...(row.base && { base: row.base }),
-                  },
-                }),
-              },
-            ],
-          }),
-        });
+        void this.sendToSpielwoerter(row);
       }
     }
 
     return true;
+  }
+
+
+  /**
+   * Hands one finalized proposal to spielwoerter.de.
+   *
+   * The response is read, not discarded. This POST used to be fire-and-forget,
+   * and when the API key was missing from production every call came back 401
+   * for six weeks without a single line in the log — roughly 540 proposals were
+   * lost that way, while players wondered why their reports went nowhere. A
+   * failure that says nothing is worse than one that fails loudly.
+   *
+   * Never throws: a word list that will not talk to us is not a reason to break
+   * the round that is being played.
+   */
+  private async sendToSpielwoerter(row: ProposalRow): Promise<void> {
+    const key = process.env.SPIELWOERTER_API_KEY ?? "";
+    const action = row.action === "remove" ? "remove" : "upsert";
+    const label = `"${row.word}" (${action})`;
+
+    if (!key) {
+      console.error(`[WordProposalServer] ${label} NOT sent: SPIELWOERTER_API_KEY is not set`);
+      return;
+    }
+
+    try {
+      const res = await fetch(SPIELWOERTER_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": key },
+        body: JSON.stringify({
+          suggestions: [
+            {
+              word: row.word,
+              action,
+              author_email: `user-${row.user_id}@wortopia.de`,
+              ...(action === "upsert" && {
+                payload: {
+                  ...(row.description && { description: row.description }),
+                  ...(row.base && { base: row.base }),
+                },
+              }),
+            },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(
+          `[WordProposalServer] ${label} rejected by spielwoerter: HTTP ${res.status} ${body.slice(0, 200)}`,
+        );
+        return;
+      }
+
+      // HTTP 200 only means the envelope was valid; each item carries its own
+      // verdict, and "skipped" is the one that silently loses a word.
+      const json = (await res.json()) as { results?: { status?: string; reason?: string }[] };
+      const result = json.results?.[0];
+
+      if (result?.status === "moderator_approved" || result?.status === "pending_review") {
+        getDb()
+          .prepare("UPDATE word_proposals SET synced_to_spielwoerter_at = ? WHERE id = ?")
+          .run(new Date().toISOString(), row.id);
+        console.log(`[WordProposalServer] ${label} accepted: ${result.status}`);
+      } else {
+        console.error(
+          `[WordProposalServer] ${label} not accepted: ${result?.status ?? "no result"}` +
+            (result?.reason ? ` — ${result.reason}` : ""),
+        );
+      }
+    } catch (err) {
+      console.error(`[WordProposalServer] ${label} could not be sent:`, err);
+    }
   }
 
   private startFinalizationSweep(): void {

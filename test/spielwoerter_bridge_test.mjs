@@ -1,0 +1,131 @@
+/**
+ * The bridge that hands finalized proposals to spielwoerter.de.
+ *
+ * It used to POST and ignore the answer, so when the API key was missing from
+ * production every call came back 401 for six weeks in silence and ~540
+ * proposals were dropped. These checks are about the answer being read: what
+ * gets recorded as delivered, what gets shouted about, and that nothing throws
+ * into the game loop.
+ *
+ * fetch is stubbed — no network, no real suggestions sent.
+ *
+ * Usage:
+ *   node test/spielwoerter_bridge_test.mjs
+ */
+
+import { createServer } from "vite";
+import path from "path";
+import fs from "fs";
+import os from "os";
+import { fileURLToPath } from "url";
+
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+// Held before the stubs go in: the test reports through these, the code under
+// test reports through the stubs.
+const say = console.log.bind(console);
+const C = { reset: "\x1b[0m", green: "\x1b[32m", red: "\x1b[31m", bold: "\x1b[1m", dim: "\x1b[2m" };
+
+let passed = 0;
+let failed = 0;
+function check(name, condition, detail = "") {
+  if (condition) {
+    passed++;
+    say(`${C.green}  ok${C.reset} ${name}`);
+  } else {
+    failed++;
+    say(`${C.red}  FAIL${C.reset} ${name}${detail ? ` ${C.dim}${detail}${C.reset}` : ""}`);
+  }
+}
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "wortopia-bridge-"));
+process.env.DATABASE_PATH = path.join(tmpDir, "test.db");
+process.env.NODE_ENV = "production"; // the bridge only fires in production
+process.env.SPIELWOERTER_API_KEY = "test-key";
+for (const k of ["COOKIE_SECRET", "GUEST_TOKEN_SECRET", "VERIFY_TOKEN_SECRET"]) process.env[k] ??= "t";
+
+const vite = await createServer({ root: ROOT, server: { middlewareMode: true }, appType: "custom" });
+
+const realFetch = globalThis.fetch;
+const sent = [];
+let respond = () => new Response(JSON.stringify({ results: [{ status: "pending_review" }] }), { status: 200 });
+globalThis.fetch = async (url, init) => {
+  sent.push({ url: String(url), body: JSON.parse(init.body), key: init.headers["X-API-Key"] });
+  return respond();
+};
+
+const logs = { out: [], err: [] };
+const realLog = console.log;
+const realErr = console.error;
+console.log = (...a) => logs.out.push(a.join(" "));
+console.error = (...a) => logs.err.push(a.join(" "));
+
+try {
+  const { getDb } = await vite.ssrLoadModule("./lib/db.ts");
+  const { getWordProposalServer } = await vite.ssrLoadModule("./lib/wordProposalServer.ts");
+  const db = getDb();
+  const server = getWordProposalServer();
+
+  const userId = Number(db.prepare("INSERT INTO users (name) VALUES ('Melderin')").run().lastInsertRowid);
+
+  /** Propose, force the window shut, then let the sweep finalize it. */
+  const finalize = async (word) => {
+    const p = server.propose(userId, "Melderin", word, "add", "eine Beschreibung", null, 4);
+    db.prepare("UPDATE word_proposals SET closes_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(p.id);
+    server.getProposals(); // triggers finalizeExpired
+    await new Promise((r) => setTimeout(r, 30)); // let the async send settle
+    return db.prepare("SELECT status, synced_to_spielwoerter_at FROM word_proposals WHERE id = ?").get(p.id);
+  };
+
+  const delivered = () => logs.out.filter((l) => l.includes("accepted"));
+  const complaints = () => logs.err.filter((l) => l.includes("WordProposalServer"));
+
+  say(`${C.bold}accepted for review${C.reset}`);
+  const okRow = await finalize("erstwort");
+  check("the request carried the key", sent[0]?.key === "test-key", JSON.stringify(sent[0]?.key));
+  check("and the word and author", sent[0]?.body.suggestions[0].word === "erstwort"
+    && sent[0]?.body.suggestions[0].author_email === `user-${userId}@wortopia.de`);
+  check("recorded as delivered", typeof okRow.synced_to_spielwoerter_at === "string", JSON.stringify(okRow));
+  check("and logged as accepted", delivered().length === 1, JSON.stringify(delivered()));
+
+  say(`${C.bold}silently skipped — the case that used to vanish${C.reset}`);
+  respond = () => new Response(JSON.stringify({ results: [{ status: "skipped", reason: "blocked" }] }), { status: 200 });
+  const skippedRow = await finalize("zweitwort");
+  check("not recorded as delivered", skippedRow.synced_to_spielwoerter_at === null, JSON.stringify(skippedRow));
+  check("and the reason is in the log", complaints().some((l) => l.includes("blocked")), JSON.stringify(complaints()));
+
+  say(`${C.bold}rejected by the API${C.reset}`);
+  logs.err.length = 0;
+  respond = () => new Response("unauthorized", { status: 401 });
+  const unauthRow = await finalize("drittwort");
+  check("not recorded as delivered", unauthRow.synced_to_spielwoerter_at === null);
+  check("401 is shouted about", complaints().some((l) => l.includes("401")), JSON.stringify(complaints()));
+
+  say(`${C.bold}the network is down${C.reset}`);
+  logs.err.length = 0;
+  respond = () => { throw new Error("ECONNREFUSED"); };
+  const downRow = await finalize("viertwort");
+  check("the proposal is still finalized locally", downRow.status === "sent_for_approval", JSON.stringify(downRow));
+  check("not marked delivered", downRow.synced_to_spielwoerter_at === null);
+  check("and it is logged rather than thrown", complaints().some((l) => l.includes("could not be sent")));
+
+  say(`${C.bold}no key configured${C.reset}`);
+  logs.err.length = 0;
+  sent.length = 0;
+  delete process.env.SPIELWOERTER_API_KEY;
+  const noKeyRow = await finalize("fuenftwort");
+  check("nothing is sent at all", sent.length === 0);
+  check("and it says why", complaints().some((l) => l.includes("SPIELWOERTER_API_KEY is not set")), JSON.stringify(complaints()));
+  check("still not marked delivered", noKeyRow.synced_to_spielwoerter_at === null);
+} finally {
+  console.log = realLog;
+  console.error = realErr;
+  globalThis.fetch = realFetch;
+  await vite.close();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+}
+
+say(
+  `\n${passed} passed, ${failed} failed` +
+    (failed === 0 ? ` ${C.green}${C.bold}ALL OK${C.reset}` : ` ${C.red}${C.bold}FAILURES${C.reset}`),
+);
+process.exit(failed === 0 ? 0 : 1);
