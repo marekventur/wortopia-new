@@ -3,10 +3,32 @@ import { Tooltip } from "react-tooltip";
 import type { TooltipRefProps } from "react-tooltip";
 import { useGameStore } from "../stores/gameStore.js";
 import { sendProposal } from "./sendProposal.js";
+import { umlautCandidate } from "../../lib/umlauts.js";
 
 export type { Tooltip, TooltipRefProps };
 
 let instanceCounter = 0;
+
+/**
+ * The board has no umlauts, so the dictionary spells ÖFFNEN as OEFFNEN and that
+ * is what players type. Proposals travel on to spielwoerter.de, where the German
+ * word is the one with the umlaut — so ask before sending, and never convert
+ * silently: Bauer and Steuer contain "ue" and are right as they stand.
+ */
+function confirmUmlaut(word: string): string {
+  const candidate = umlautCandidate(word);
+  if (!candidate) return word;
+
+  const useUmlaut = window.confirm(
+    `„${word.toUpperCase()}" enthält ae/oe/ue.\n\n` +
+      `Wenn das Wort eigentlich mit Umlaut geschrieben wird, schlage bitte „${candidate.toUpperCase()}" vor — ` +
+      `im Spiel gibt es keine Umlaute, im Wörterbuch schon.\n\n` +
+      `OK = „${candidate.toUpperCase()}" vorschlagen\n` +
+      `Abbrechen = „${word.toUpperCase()}" so lassen`,
+  );
+
+  return useUmlaut ? candidate : word;
+}
 
 export function usePinnableTooltip<T extends { word: string; description: string | null }>() {
   const instanceId = useRef(++instanceCounter).current;
@@ -19,6 +41,10 @@ export function usePinnableTooltip<T extends { word: string; description: string
   const enrichResult = useGameStore((s) => s.enrichResult);
   const isLoggedIn = myUserId !== null && myUserId > 0;
   const [enrichingWord, setEnrichingWord] = useState<string | null>(null);
+  // The word the player clicked, which differs from the one being looked up
+  // once they choose the umlaut spelling. The lists match their rows against
+  // this, so the row they clicked is the one that says it is working.
+  const [enrichingSource, setEnrichingSource] = useState<string | null>(null);
 
   // Close when another instance pins
   useEffect(() => {
@@ -42,7 +68,10 @@ export function usePinnableTooltip<T extends { word: string; description: string
 
   // Cancel enriching if tooltip dismissed before result arrives
   useEffect(() => {
-    if (!tooltipWord && enrichingWord) setEnrichingWord(null);
+    if (!tooltipWord && enrichingWord) {
+      setEnrichingWord(null);
+      setEnrichingSource(null);
+    }
   }, [tooltipWord]);
 
   // Show prompt when enrich result arrives
@@ -57,6 +86,7 @@ export function usePinnableTooltip<T extends { word: string; description: string
       close();
     }
     setEnrichingWord(null);
+    setEnrichingSource(null);
     useGameStore.getState().setEnrichResult(null);
   }, [enrichResult]);
 
@@ -96,8 +126,12 @@ export function usePinnableTooltip<T extends { word: string; description: string
   };
 
   const requestEnrich = (word: string) => {
-    setEnrichingWord(word);
-    useGameStore.getState()._send?.(JSON.stringify({ type: "enrich_word", word }));
+    // Asked before the lookup, so the description that comes back belongs to the
+    // word actually being proposed.
+    const chosen = confirmUmlaut(word);
+    setEnrichingWord(chosen);
+    setEnrichingSource(word);
+    useGameStore.getState()._send?.(JSON.stringify({ type: "enrich_word", word: chosen }));
   };
 
   const renderTooltip = (content: (word: T) => ReactNode): React.ReactElement =>
@@ -113,7 +147,7 @@ export function usePinnableTooltip<T extends { word: string; description: string
 
   return {
     tooltipWord, tooltipPinned, tooltipRef,
-    isLoggedIn, proposedWords, enrichingWord,
+    isLoggedIn, proposedWords, enrichingWord: enrichingSource,
     handleMouseEnter, handleMouseLeave, handleClick,
     close, requestEnrich, renderTooltip,
   };
