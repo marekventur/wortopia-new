@@ -12,6 +12,14 @@ export type GuessResult =
 export type ValidateResult = {
   result: GuessResult;
   points: number;
+  /**
+   * Whether the word exists in the dictionary at all. Only set for
+   * `not_on_field`, where the result on its own does not say: a word can miss
+   * the board and still be a perfectly good word, or be missing from both. The
+   * client needs the difference to decide whether offering "add to dictionary"
+   * would make any sense.
+   */
+  inDictionary?: boolean;
 };
 
 /**
@@ -56,10 +64,14 @@ export function validateGuess(
     // Distinguish: is it on the field (but not in dictionary) or not traceable?
     const grid = fieldToGrid(field, size);
     const onField = fieldContains(grid, lower) !== null;
-    return {
-      result: onField ? "not_in_dictionary" : "not_on_field",
-      points: 0,
-    };
+    if (onField) return { result: "not_in_dictionary", points: 0, inDictionary: false };
+
+    // Off the board. Players report missing words by typing them, and typing a
+    // word that is not on this board is the only way to do that without wrecking
+    // the round they are playing — so look it up, and let them propose it if it
+    // is genuinely unknown. A primary-key hit on `words`, on the error path only.
+    const known = db.prepare("SELECT 1 FROM words WHERE word = ?").get(lower) !== undefined;
+    return { result: "not_on_field", points: 0, inDictionary: known };
   }
 
   // 5. Correct

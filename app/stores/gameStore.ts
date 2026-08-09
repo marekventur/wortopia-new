@@ -15,6 +15,8 @@ export type GuessEntry = {
   result: string;
   points: number;
   description: string | null;
+  /** Only for `not_on_field`: whether the word exists in the dictionary. */
+  inDictionary?: boolean;
 };
 
 type GameStore = {
@@ -143,6 +145,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       result: msg.result,
       points: msg.points,
       description: msg.description,
+      inDictionary: msg.inDictionary,
     };
     set((state) => ({
       myGuesses: [entry, ...state.myGuesses],

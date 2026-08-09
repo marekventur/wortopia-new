@@ -87,6 +87,8 @@ export type WsGuessResultMsg = {
   result: string;
   points: number;
   description: string | null;
+  /** Only sent for `not_on_field`: whether the word is in the dictionary. */
+  inDictionary?: boolean;
   player_results: RoundResults;
 };
 

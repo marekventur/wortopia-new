@@ -56,6 +56,8 @@ export type GuessResponse = {
   result: string;
   points: number;
   description: string | null;
+  /** See ValidateResult: only set when the word missed the board. */
+  inDictionary?: boolean;
   player_results: RoundResults;
 };
 
@@ -324,7 +326,7 @@ export class GameServer extends EventEmitter {
       };
     }
 
-    const { result, points } = validateGuess(
+    const { result, points, inDictionary } = validateGuess(
       word,
       size,
       userId,
@@ -353,7 +355,7 @@ export class GameServer extends EventEmitter {
       description = row?.description ?? null;
     }
 
-    return { word, result, points, description, player_results: playerResults };
+    return { word, result, points, description, inDictionary, player_results: playerResults };
   }
 
   /** Load the full guess history for a round+size from DB. */

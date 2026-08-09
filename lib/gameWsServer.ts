@@ -20,7 +20,7 @@ type IncomingFrame =
 type OutgoingFrame =
   | { type: "update"; current_round: UpdatePayload["current_round"]; last_round: UpdatePayload["last_round"] }
   | { type: "tick"; current_round: TickPayload["current_round"] }
-  | { type: "guess_result"; word: string; result: string; points: number; description: string | null; player_results: UpdatePayload["current_round"]["results"] }
+  | { type: "guess_result"; word: string; result: string; points: number; description: string | null; inDictionary?: boolean; player_results: UpdatePayload["current_round"]["results"] }
   | { type: "chat_init"; messages: ChatMessage[] }
   | { type: "chat_message"; message: ChatMessage }
   | { type: "proposals"; proposals: ProposalMap }
@@ -159,6 +159,7 @@ export function createGameWsServer(): Map<string, WebSocketServer> {
             result: response.result,
             points: response.points,
             description: response.description,
+            inDictionary: response.inDictionary,
             player_results: response.player_results,
           });
           return;
