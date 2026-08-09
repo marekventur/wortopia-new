@@ -9,10 +9,29 @@
 
 import { createServer } from "vite";
 import path from "path";
+import fs from "fs";
+import os from "os";
+import Database from "better-sqlite3";
 import { fileURLToPath } from "url";
 import { setTimeout as sleep } from "timers/promises";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+// ── Scratch database ─────────────────────────────────────────────────────────
+// This used to run against whatever data/app.db held, which meant it inserted
+// test words into the real dictionary and left round_guesses rows for a user
+// (9999) that does not exist. A dev server sharing that file then died at the
+// end of the round: persistRoundResults hit a foreign key that had never been
+// there. So: a throwaway database, with only the word list copied across —
+// which is all this test actually needs from the real one.
+const SOURCE_DB = process.env.WORTOPIA_SOURCE_DB ?? path.join(ROOT, "data", "app.db");
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "wortopia-game-"));
+process.env.DATABASE_PATH = path.join(tmpDir, "test.db");
+process.env.NODE_ENV = "test";
+for (const key of ["COOKIE_SECRET", "GUEST_TOKEN_SECRET", "VERIFY_TOKEN_SECRET"]) {
+  process.env[key] ??= "test-secret-not-used-outside-tests";
+}
+process.on("exit", () => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
 // ── Colours ──────────────────────────────────────────────────────────────────
 const C = {
@@ -63,6 +82,24 @@ console.log(`${C.green}Modules loaded.${C.reset}\n`);
 section("DB Setup");
 
 const db = getDb();
+
+// The dictionary is the one thing worth borrowing: the assertions below are
+// about how many real words a real field yields, so a handful of made-up
+// entries would prove nothing.
+if (fs.existsSync(SOURCE_DB)) {
+  const source = new Database(SOURCE_DB, { readonly: true });
+  const rows = source.prepare("SELECT word, accepted, description FROM words").all();
+  source.close();
+  const insertWord = db.prepare(
+    "INSERT OR IGNORE INTO words (word, accepted, description) VALUES (?, ?, ?)",
+  );
+  db.transaction(() => {
+    for (const row of rows) insertWord.run(row.word, row.accepted, row.description);
+  })();
+  info(`Copied ${rows.length} words from ${SOURCE_DB}`);
+} else {
+  info(`No source database at ${SOURCE_DB} — running with an empty dictionary`);
+}
 
 // Check how many words we have
 const wordCount = db.prepare("SELECT count(*) as n FROM words").get().n;

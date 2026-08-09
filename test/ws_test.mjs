@@ -1,6 +1,12 @@
 /**
  * WebSocket smoke test — runs against the live dev server.
  *
+ * Unlike the other suites this one deliberately shares the running server's
+ * database: it drives the real socket and has to see the same dictionary the
+ * server does. It only reads, and plays as a guest (negative user id), whose
+ * rows persistRoundResults skips — so it leaves nothing behind that could
+ * break the round in progress.
+ *
  * Usage:
  *   npm run dev &
  *   node test/ws_test.mjs [port]   # default port 3005
