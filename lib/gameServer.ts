@@ -406,10 +406,25 @@ export class GameServer extends EventEmitter {
   }
 }
 
-// Singleton — one game server for the whole process
-let _instance: GameServer | null = null;
+/**
+ * Singleton — one game server for the whole process, and it has to be the whole
+ * process rather than the module.
+ *
+ * server.js imports this file directly, while the React Router build bundles its
+ * own copy of it, so a module-level `let` gives two instances: the one server.js
+ * calls init() on, which runs the game, and a second, permanently empty one that
+ * every route sees. That is why /api/player-counts reported 0 players while six
+ * people were playing — it was asking the wrong instance, and only in
+ * production, since in dev both sides come from Vite's module graph.
+ *
+ * Symbol.for keys the registry globally, so both copies land on the same object.
+ */
+const GAME_SERVER = Symbol.for("wortopia.gameServer");
+
+type GlobalWithGameServer = typeof globalThis & { [GAME_SERVER]?: GameServer };
 
 export function getGameServer(): GameServer {
-  if (!_instance) _instance = new GameServer();
-  return _instance;
+  const g = globalThis as GlobalWithGameServer;
+  if (!g[GAME_SERVER]) g[GAME_SERVER] = new GameServer();
+  return g[GAME_SERVER];
 }
