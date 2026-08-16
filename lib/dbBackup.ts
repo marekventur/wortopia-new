@@ -6,6 +6,14 @@ import { Storage } from "@google-cloud/storage";
 const BUCKET = process.env.GCS_BACKUP_BUCKET ?? "general-backup-marekventur";
 const OBJECT = process.env.GCS_BACKUP_OBJECT ?? "wortopia.db";
 
+// Only the production instance may write the backup. server.js schedules this on
+// both the development and production paths, and the defaults above point at the
+// live object — so any dev instance that happens to have GCS_BACKUP_CREDENTIALS
+// in its .env would overwrite production's backup with its own database once a
+// day. Guard on NODE_ENV rather than on the credential being absent, so the
+// protection does not depend on how a particular machine's .env is arranged.
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
 function msUntil3am(): number {
   const now = new Date();
   const next = new Date(now);
@@ -37,6 +45,11 @@ async function runBackup(): Promise<void> {
 }
 
 export function scheduleDbBackup(): void {
+  if (!IS_PRODUCTION) {
+    console.log("[backup] Skipped (not production).");
+    return;
+  }
+
   function scheduleNext() {
     const delay = msUntil3am();
     console.log(`[backup] Next backup at 3am (in ${Math.round(delay / 60000)} min)`);
