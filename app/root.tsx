@@ -48,7 +48,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <title>Wortopia v2</title>
         <Links />
         <Meta />
-        <script defer src="https://cloud.umami.is/script.js" data-website-id="0c82c79d-5e4d-4a0c-ba72-48d8e8e02690"></script>
+        {/* Analytics, production only.
+          *
+          * `import.meta.env.PROD` is false on dev.wortopia.de: server.js starts
+          * the Vite dev server when NODE_ENV=development, so the dev box serves
+          * an unbuilt bundle. Without this gate the dev instance reports into
+          * production's stats — Umami was doing exactly that until now.
+          *
+          * GoatCounter is self-hosted on vps3 (see vps-setup) and is replacing
+          * Umami. The two run side by side only for a short overlap, so the new
+          * numbers can be sanity-checked against the old ones before the only
+          * source of truth changes; the counts will not match exactly, since
+          * the two filter bots differently. Delete the Umami line once that
+          * comparison looks right — nothing else depends on it. */}
+        {import.meta.env.PROD && (
+          <>
+            <script defer src="https://cloud.umami.is/script.js" data-website-id="0c82c79d-5e4d-4a0c-ba72-48d8e8e02690"></script>
+            <script data-goatcounter="https://analytics.wortopia.de/count" async src="https://analytics.wortopia.de/count.js"></script>
+          </>
+        )}
       </head>
       <body className="size-4 game-ongoing field-style--default wortopia">
         {children}
