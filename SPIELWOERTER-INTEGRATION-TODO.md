@@ -1,5 +1,14 @@
 # Spielwoerter integration: verify the fix, then backfill
 
+> **Status 2026-08-21.** §1, §2 and §4 are done. The bridge sends votes
+> (`be94cfa`) and the backlog has been walked once on the server
+> (`ee9da88`): 206 items sent, 199 accepted — 5 of them applied automatically
+> on net support >= 2, which is the first time that path has ever fired.
+> 7 came back `skipped` and were deliberately left unmarked. §3 was verified
+> against production the same day: 273 proposals accepted since the key was
+> fixed, only 2 ever left pending, median time to a decision 15 h.
+> **§5 is the only part still open**, plus the umlaut problem below it.
+
 Handoff from the spielwoerter-website side, 2026-08-09. Context: the partner-API
 bridge to spielwoerter.de has been silently broken since launch — root cause
 found and the config half already fixed. This doc covers what remains on the
@@ -24,7 +33,7 @@ wortopia side.
 - API reference: https://github.com/marekventur/spielwoerter-website/blob/main/docs/partner-api.md
   (the repo is public now).
 
-## 1. Make failures visible (do this first)
+## 1. Make failures visible (do this first) — DONE
 
 In `finalizeExpired()` (`lib/wordProposalServer.ts` ~line 288): the POST is
 fire-and-forget. Change it to await the response, check `res.ok`, parse the
@@ -34,7 +43,7 @@ purely because of this. Consider recording delivery on the proposal row
 (e.g. a `synced_to_spielwoerter_at` column) so undelivered proposals stay
 queryable — that also makes the backfill in §4 idempotent.
 
-## 2. Send the votes (currently the bridge never auto-approves)
+## 2. Send the votes (currently the bridge never auto-approves) — DONE
 
 The POST body omits `supporters`/`opposers`, so spielwoerter computes
 `net_support = 0` and **every** submission lands in the human moderation queue.
@@ -46,7 +55,7 @@ Spielwoerter's validation (per-item error if violated): author must not appear
 in either list, no email in both lists, max 50 per list. `net_support >= 2`
 auto-approves; the word is then published on spielwoerter's next hourly sync.
 
-## 3. Test end-to-end
+## 3. Test end-to-end — DONE
 
 - The bridge only fires when `NODE_ENV === "production"`, so test on the VPS.
   For a direct check without waiting for a vote window:
@@ -64,7 +73,20 @@ auto-approves; the word is then published on spielwoerter's next hourly sync.
   spellings whose umlaut sibling is already listed — submit the umlaut spelling
   instead; relevant because the game alphabet may produce ae-forms).
 
-## 4. Backfill the ~530 dropped proposals
+## 4. Backfill the ~530 dropped proposals — DONE
+
+`scripts/backfill-spielwoerter.ts`, run once on the server 2026-08-21. Of 444
+undelivered rows / 408 unique word+action, 202 were dropped as pointless
+(93 already listed, 77 already gone, 32 blocked by the umlaut rule) and 206
+sent. It is safe to run again: accepted items are stamped, everything else is
+re-evaluated against the live list.
+
+**The umlaut hole is the interesting leftover.** 27 of the dropped removals are
+reports against an ae/ss spelling whose *umlaut* sibling is the listed word —
+the game normalises ä→ae and ß→ss, so removing `saehle` cannot take `sähle`
+out of the game. This is what players mean when they say deletions do not take
+effect (`büssi` was removed on 16.05; `büßi` is still listed, so the word is
+still playable). The removal has to name the umlaut spelling.
 
 Everything finalized since 2026-07-27 was lost to the 401s but is still in the
 wortopia DB. As of 2026-08-09: **15 `approved` + 516 `sent_for_approval`** rows
