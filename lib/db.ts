@@ -122,6 +122,24 @@ const SCHEMA = `
     user_id INTEGER NOT NULL
   );
 
+  -- How spielwoerter.de actually spells each word the game plays.
+  --
+  -- The board has no umlauts, so the dictionary is normalised on the way in:
+  -- ÖFFNEN is stored and played as OEFFNEN, and that is the only spelling
+  -- wortopia has ever known. It is not the spelling the word list uses, and a
+  -- report travelling the other way has to name the listed one — asking for
+  -- "buessi" to be removed leaves "büßi" listed and the word still playable,
+  -- which is exactly what players kept reporting.
+  --
+  -- One row per (normalised word, listed spelling). Usually one, but 1,137
+  -- words are listed under two spellings at once ("abbeisse" and "abbeiße"),
+  -- and for those the game only stops playing the word when both are gone.
+  CREATE TABLE IF NOT EXISTS word_spellings (
+    word     TEXT NOT NULL COLLATE NOCASE,
+    spelling TEXT NOT NULL,
+    PRIMARY KEY (word, spelling)
+  );
+
   CREATE TABLE IF NOT EXISTS word_sync_log (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     synced_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -326,6 +344,20 @@ function migrateProposalDeliveryMarker(db: Database.Database): void {
  * takes about three seconds on the live database and runs once, when the index
  * is first created.
  */
+/**
+ * The word list's version string, as it stood at the last sync.
+ *
+ * Without it the only way to know whether the list has moved is to pull all six
+ * megabytes of it, so the sync ran once a night and an approved word waited up
+ * to 24 hours to become playable. Players read that lag as their reports being
+ * ignored.
+ */
+function migrateWordSyncVersion(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE word_sync_log ADD COLUMN version TEXT").run();
+  } catch {}
+}
+
 function migrateLeaderboardFinishedIndex(db: Database.Database): void {
   const exists = db
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?")
@@ -421,6 +453,7 @@ export function getDb(): Database.Database {
     migrateEmailCodePlaintext(db);
     migrateLeaderboardFinishedIndex(db);
     migrateProposalDeliveryMarker(db);
+    migrateWordSyncVersion(db);
     migrateHiddenAccounts(db);
     migrateV1Claims(db);
   }

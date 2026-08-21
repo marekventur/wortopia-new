@@ -7,7 +7,10 @@
 > 7 came back `skipped` and were deliberately left unmarked. §3 was verified
 > against production the same day: 273 proposals accepted since the key was
 > fixed, only 2 ever left pending, median time to a decision 15 h.
-> **§5 is the only part still open**, plus the umlaut problem below it.
+> §5 and the umlaut problem are done too (2026-08-21): the sync records the
+> spelling the list uses, so removals name it instead of guessing, and the list
+> is pulled when its version string moves rather than once a night. Nothing
+> here is outstanding.
 
 Handoff from the spielwoerter-website side, 2026-08-09. Context: the partner-API
 bridge to spielwoerter.de has been silently broken since launch — root cause
@@ -115,7 +118,18 @@ items on the volunteer moderators at once. Options: spread batches over days,
 or prefilter against the current wordlist (`/api/words.csv`) and only submit
 words whose state would actually change.
 
-## 5. While you're in there: faster wordlist sync
+## 5. While you're in there: faster wordlist sync — DONE
+
+`wordSync` polls `/api/latest-update` every five minutes and pulls the CSV only
+when the version string moves, with a 24-hour floor so a stuck version cannot
+freeze the dictionary. The version is kept in `word_sync_log.version`, so a
+restart does not re-pull.
+
+The deletions players kept reporting were the umlaut problem, not the sync:
+the game flattens ä→ae and ß→ss, so removing the listed `büssi` left `büßi`
+listed and the word playable. `word_spellings` now records every spelling the
+list uses for each playable word, and `listedSpellings()` resolves a proposal
+to the spelling — or both spellings — that actually feed the game.
 
 New public endpoint (no auth): `GET https://spielwoerter.de/api/latest-update`
 → `{"version": "<opaque string>"}`, cacheable 60 s. Poll it every few minutes

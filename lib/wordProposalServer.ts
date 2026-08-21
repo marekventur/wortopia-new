@@ -5,6 +5,7 @@ import { getChatServer } from "./chatServer.js";
 import { maskName, maskText } from "./profanity.js";
 import { setMaxListenersForConnections } from "./eventLimits.js";
 import { SIZES } from "./gameConfig.js";
+import { listedSpellings } from "./wordSpellings.js";
 import type { Proposal, ProposalAction, ProposalMap, ProposalStatus } from "./proposalTypes.js";
 
 const VOTE_WINDOW_MINUTES = 30;
@@ -334,6 +335,24 @@ export class WordProposalServer extends EventEmitter {
   }
 
   /**
+   * The word or words this proposal is actually about, as spielwoerter.de
+   * spells them.
+   *
+   * The board has no umlauts, so a player reports OEFFNEN and the list holds
+   * "öffnen"; asking for "oeffnen" to go changes nothing and the word stays
+   * playable. Where the list has told us its spelling, use it — and where it
+   * lists the word twice over ("abbeisse" and "abbeiße"), name both, because
+   * the game keeps playing the word until every listing is gone.
+   *
+   * A word the list does not have at all is a genuine addition: it travels as
+   * the player wrote it, umlauts included if they were offered and accepted.
+   */
+  private targetSpellings(word: string): string[] {
+    const listed = listedSpellings(word);
+    return listed.length > 0 ? listed : [word];
+  }
+
+  /**
    * Hands one finalized proposal to spielwoerter.de.
    *
    * The response is read, not discarded. This POST used to be fire-and-forget,
@@ -356,27 +375,26 @@ export class WordProposalServer extends EventEmitter {
     }
 
     const { supporters, opposers } = this.votersFor(row);
+    const words = this.targetSpellings(row.word);
 
     try {
       const res = await fetch(SPIELWOERTER_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": key },
         body: JSON.stringify({
-          suggestions: [
-            {
-              word: row.word,
-              action,
-              author_email: partnerEmail(row.user_id),
-              ...(action === "upsert" && {
-                payload: {
-                  ...(row.description && { description: row.description }),
-                  ...(row.base && { base: row.base }),
-                },
-              }),
-              ...(supporters.length > 0 && { supporters }),
-              ...(opposers.length > 0 && { opposers }),
-            },
-          ],
+          suggestions: words.map((word) => ({
+            word,
+            action,
+            author_email: partnerEmail(row.user_id),
+            ...(action === "upsert" && {
+              payload: {
+                ...(row.description && { description: row.description }),
+                ...(row.base && { base: row.base }),
+              },
+            }),
+            ...(supporters.length > 0 && { supporters }),
+            ...(opposers.length > 0 && { opposers }),
+          })),
         }),
       });
 
@@ -391,20 +409,31 @@ export class WordProposalServer extends EventEmitter {
       // HTTP 200 only means the envelope was valid; each item carries its own
       // verdict, and "skipped" is the one that silently loses a word.
       const json = (await res.json()) as { results?: { status?: string; reason?: string }[] };
-      const result = json.results?.[0];
+      const results = json.results ?? [];
+      const accepted = (r?: { status?: string }) =>
+        r?.status === "moderator_approved" || r?.status === "pending_review";
 
-      if (result?.status === "moderator_approved" || result?.status === "pending_review") {
+      words.forEach((word, i) => {
+        if (accepted(results[i])) return;
+        console.error(
+          `[WordProposalServer] "${word}" (${action}) not accepted:` +
+            ` ${results[i]?.status ?? "no result"}` +
+            (results[i]?.reason ? ` — ${results[i].reason}` : ""),
+        );
+      });
+
+      // Delivered means every spelling got through. Marking a partial success
+      // as done would hide the half that did not: while one listing survives,
+      // the game still plays the word and the player still sees their report
+      // ignored.
+      if (words.every((_, i) => accepted(results[i]))) {
         getDb()
           .prepare("UPDATE word_proposals SET synced_to_spielwoerter_at = ? WHERE id = ?")
           .run(new Date().toISOString(), row.id);
         console.log(
-          `[WordProposalServer] ${label} accepted: ${result.status}` +
+          `[WordProposalServer] ${label} accepted as ${words.map((w) => `"${w}"`).join(" + ")}:` +
+            ` ${results[0]?.status}` +
             ` (${supporters.length} for, ${opposers.length} against)`,
-        );
-      } else {
-        console.error(
-          `[WordProposalServer] ${label} not accepted: ${result?.status ?? "no result"}` +
-            (result?.reason ? ` — ${result.reason}` : ""),
         );
       }
     } catch (err) {

@@ -137,6 +137,69 @@ try {
   check("capped at 50", sent[0]?.body.suggestions[0].supporters.length === 50,
     String(sent[0]?.body.suggestions[0].supporters?.length));
 
+  say(`${C.bold}the word is listed under a spelling the board cannot hold${C.reset}`);
+  sent.length = 0;
+  {
+    // As a sync would leave it: the game plays "oeffnen", the list holds "öffnen".
+    db.prepare("INSERT INTO words (word, accepted, description) VALUES ('oeffnen', 1, NULL)").run();
+    db.prepare("INSERT INTO word_spellings (word, spelling) VALUES ('oeffnen', 'öffnen')").run();
+    const p = server.propose(userId, "Melderin", "oeffnen", "remove", null, null, 4, false, "gibt es nicht");
+    db.prepare("UPDATE word_proposals SET closes_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(p.id);
+    server.getProposals();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  check("the umlaut spelling is what travels", sent[0]?.body.suggestions[0].word === "öffnen",
+    JSON.stringify(sent[0]?.body.suggestions));
+  check("and only that one", sent[0]?.body.suggestions.length === 1, String(sent[0]?.body.suggestions.length));
+
+  say(`${C.bold}listed twice over${C.reset}`);
+  sent.length = 0;
+  respond = () => new Response(JSON.stringify({ results: [{ status: "pending_review" }, { status: "pending_review" }] }), { status: 200 });
+  {
+    db.prepare("INSERT INTO words (word, accepted, description) VALUES ('abbeisse', 1, NULL)").run();
+    for (const spelling of ["abbeisse", "abbeiße"]) {
+      db.prepare("INSERT INTO word_spellings (word, spelling) VALUES ('abbeisse', ?)").run(spelling);
+    }
+    const p = server.propose(userId, "Melderin", "abbeisse", "remove", null, null, 4, false, "gibt es nicht");
+    db.prepare("UPDATE word_proposals SET closes_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(p.id);
+    server.getProposals();
+    await new Promise((r) => setTimeout(r, 30));
+    var bothRow = db.prepare("SELECT synced_to_spielwoerter_at FROM word_proposals WHERE id = ?").get(p.id);
+  }
+  check("both spellings are named", JSON.stringify(sent[0]?.body.suggestions.map((x) => x.word)) === JSON.stringify(["abbeisse", "abbeiße"]),
+    JSON.stringify(sent[0]?.body.suggestions.map((x) => x.word)));
+  check("and that counts as delivered", typeof bothRow.synced_to_spielwoerter_at === "string", JSON.stringify(bothRow));
+
+  say(`${C.bold}only half of a double listing gets through${C.reset}`);
+  sent.length = 0;
+  respond = () => new Response(JSON.stringify({ results: [{ status: "pending_review" }, { status: "skipped", reason: "conflict" }] }), { status: 200 });
+  {
+    db.prepare("INSERT INTO words (word, accepted, description) VALUES ('abfliesse', 1, NULL)").run();
+    for (const spelling of ["abfliesse", "abfließe"]) {
+      db.prepare("INSERT INTO word_spellings (word, spelling) VALUES ('abfliesse', ?)").run(spelling);
+    }
+    const p = server.propose(userId, "Melderin", "abfliesse", "remove", null, null, 4, false, "gibt es nicht");
+    db.prepare("UPDATE word_proposals SET closes_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(p.id);
+    server.getProposals();
+    await new Promise((r) => setTimeout(r, 30));
+    var halfRow = db.prepare("SELECT synced_to_spielwoerter_at FROM word_proposals WHERE id = ?").get(p.id);
+  }
+  check("not delivered while one listing survives", halfRow.synced_to_spielwoerter_at === null, JSON.stringify(halfRow));
+  check("and the half that failed is named", complaints().some((l) => l.includes("abfließe") && l.includes("conflict")),
+    JSON.stringify(complaints().slice(-1)));
+
+  say(`${C.bold}a word the list does not have${C.reset}`);
+  sent.length = 0;
+  respond = () => new Response(JSON.stringify({ results: [{ status: "pending_review" }] }), { status: 200 });
+  {
+    const p = server.propose(userId, "Melderin", "möhre", "add", "eine Beschreibung", null, 4);
+    db.prepare("UPDATE word_proposals SET closes_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(p.id);
+    server.getProposals();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  check("travels exactly as the player wrote it", sent[0]?.body.suggestions[0].word === "möhre",
+    JSON.stringify(sent[0]?.body.suggestions[0]?.word));
+
   say(`${C.bold}silently skipped — the case that used to vanish${C.reset}`);
   respond = () => new Response(JSON.stringify({ results: [{ status: "skipped", reason: "blocked" }] }), { status: 200 });
   const skippedRow = await finalize("zweitwort");

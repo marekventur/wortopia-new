@@ -27,9 +27,9 @@
 
 import { getDb } from "../lib/db.js";
 import { partnerEmail } from "../lib/wordProposalServer.js";
+import { listedSpellings } from "../lib/wordSpellings.js";
 
 const SUGGESTIONS_URL = "https://spielwoerter.de/api/partner/suggestions";
-const WORDLIST_URL = "https://spielwoerter.de/api/words.csv";
 const BATCH_SIZE = 100; // the API's documented maximum
 const MAX_VOTERS_PER_SIDE = 50;
 
@@ -53,6 +53,8 @@ type Row = {
 type Item = {
   ids: string[];
   word: string;
+  /** How spielwoerter.de spells it — more than one when it lists the word twice. */
+  words: string[];
   action: "upsert" | "remove";
   author: number;
   description: string | null;
@@ -64,35 +66,18 @@ type Item = {
 const db = getDb();
 
 // ── The live list, to drop everything that would change nothing ──────────────
-process.stdout.write("fetching the current word list… ");
-const csv = await (await fetch(WORDLIST_URL)).text();
-const listed = new Set(
-  csv
-    .split("\n")
-    .slice(1)
-    .map((line) => line.split(",")[0]?.trim().toLowerCase())
-    .filter(Boolean),
-);
-console.log(`${listed.size} words`);
-
-/**
- * spielwoerter refuses an ae/oe/ue/ss spelling when the umlaut sibling is
- * listed, so those are dropped here rather than spent on a round trip.
- */
-function umlautSiblingListed(word: string): string | null {
-  const found: string[] = [];
-  const walk = (i: number, acc: string) => {
-    if (i >= word.length) { found.push(acc); return; }
-    const pair = word.slice(i, i + 2);
-    if (pair === "ae") walk(i + 2, acc + "ä");
-    if (pair === "oe") walk(i + 2, acc + "ö");
-    if (pair === "ue" && word[i - 1] !== "q") walk(i + 2, acc + "ü");
-    if (pair === "ss") walk(i + 2, acc + "ß");
-    walk(i + 1, acc + word[i]);
-  };
-  walk(0, "");
-  return found.find((c) => c !== word && listed.has(c)) ?? null;
+// It is the game's own copy, kept within minutes of spielwoerter.de by the
+// sync, and it now records the spelling each word is listed under — so the
+// question "would this change anything" is answered without guessing which
+// ae/oe/ue was meant to be an umlaut.
+const { words: listedCount } = db.prepare("SELECT COUNT(*) AS words FROM words").get() as {
+  words: number;
+};
+if (listedCount === 0) {
+  console.error("The word list is empty — a sync has to run before this can judge anything.");
+  process.exit(1);
 }
+console.log(`the word list holds ${listedCount} words`);
 
 // ── Everything still undelivered ─────────────────────────────────────────────
 const rows = db
@@ -120,6 +105,7 @@ for (const row of rows) {
   const item: Item = existing ?? {
     ids: [],
     word: row.word.toLowerCase(),
+    words: [],
     action,
     author: row.user_id,
     description: row.description,
@@ -145,25 +131,25 @@ for (const row of rows) {
 }
 
 // ── Drop what cannot achieve anything ────────────────────────────────────────
-const skipped = { addListed: 0, removeGone: 0, umlaut: 0, removeUmlaut: 0 };
+const skipped = { addListed: 0, removeGone: 0 };
 let queue: Item[] = [];
+let doubleListed = 0;
 
 for (const item of merged.values()) {
+  const spellings = listedSpellings(item.word);
+
   if (item.action === "remove") {
-    if (!listed.has(item.word)) {
-      // The game spells words without umlauts, so a report against "saehle"
-      // cannot remove the listed "sähle" — and asking for the ae form to go
-      // achieves nothing, since the sibling is what feeds the game. These are
-      // counted rather than sent; they need reporting against the umlaut
-      // spelling, which is a question for the player, not for this script.
-      if (umlautSiblingListed(item.word)) skipped.removeUmlaut++;
-      else skipped.removeGone++;
-      continue;
-    }
+    // Nothing to remove: either it was never there or someone got there first.
+    if (spellings.length === 0) { skipped.removeGone++; continue; }
+    // Both "abbeisse" and "abbeiße" listed: the game plays the word until both
+    // are gone, so the removal has to name both.
+    if (spellings.length > 1) doubleListed++;
+    item.words = spellings;
   } else {
-    if (listed.has(item.word)) { skipped.addListed++; continue; }
-    const sibling = umlautSiblingListed(item.word);
-    if (sibling) { skipped.umlaut++; continue; }
+    // Listed under any spelling means the word is in the game already — which
+    // is what the player was asking for.
+    if (spellings.length > 0) { skipped.addListed++; continue; }
+    item.words = [item.word];
   }
 
   // The API rejects the whole item if the author votes on it, or if a side is
@@ -186,8 +172,7 @@ console.log(`\nundelivered proposals      ${rows.length}`);
 console.log(`unique word+action         ${merged.size}`);
 console.log(`  dropped, already listed  ${skipped.addListed}`);
 console.log(`  dropped, already gone    ${skipped.removeGone}`);
-console.log(`  dropped, umlaut sibling  ${skipped.umlaut}`);
-console.log(`  removals of an ae form whose umlaut sibling is the listed one: ${skipped.removeUmlaut}`);
+console.log(`  removals naming two spellings at once: ${doubleListed}`);
 console.log(`to send                    ${queue.length}` +
   ` (${queue.filter((i) => i.action === "remove").length} remove, ${queue.filter((i) => i.action === "upsert").length} add)`);
 console.log(`  of those, auto-approved  ${autoApprove.length} — the rest go to human review`);
@@ -212,34 +197,47 @@ const markDelivered = db.prepare(
 
 const tally: Record<string, number> = {};
 let batchNo = 0;
+let cursor = 0;
 
-for (let start = 0; start < queue.length; start += BATCH_SIZE) {
+/** As many items as fit, counting spellings — a two-spelling removal is two. */
+function nextBatch(): Item[] {
+  const batch: Item[] = [];
+  let size = 0;
+  while (cursor < queue.length && size + queue[cursor].words.length <= BATCH_SIZE) {
+    size += queue[cursor].words.length;
+    batch.push(queue[cursor++]);
+  }
+  return batch;
+}
+
+while (cursor < queue.length) {
   if (batchNo >= maxBatches) {
-    console.log(`\nStopping after ${batchNo} batch(es) as asked. ${queue.length - start} item(s) left.`);
+    console.log(`\nStopping after ${batchNo} batch(es) as asked. ${queue.length - cursor} item(s) left.`);
     break;
   }
-  const batch = queue.slice(start, start + BATCH_SIZE);
+  const batch = nextBatch();
+  const suggestions = batch.flatMap((i) =>
+    i.words.map((word) => ({
+      word,
+      action: i.action,
+      author_email: partnerEmail(i.author),
+      ...(i.action === "upsert" && {
+        payload: {
+          ...(i.description && { description: i.description }),
+          ...(i.base && { base: i.base }),
+        },
+      }),
+      ...(i.supporters.length > 0 && { supporters: i.supporters }),
+      ...(i.opposers.length > 0 && { opposers: i.opposers }),
+    })),
+  );
   batchNo++;
-  console.log(`\n── batch ${batchNo}: ${batch.length} item(s) ──`);
+  console.log(`\n── batch ${batchNo}: ${batch.length} item(s), ${suggestions.length} suggestion(s) ──`);
 
   const res = await fetch(SUGGESTIONS_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-API-Key": key },
-    body: JSON.stringify({
-      suggestions: batch.map((i) => ({
-        word: i.word,
-        action: i.action,
-        author_email: partnerEmail(i.author),
-        ...(i.action === "upsert" && {
-          payload: {
-            ...(i.description && { description: i.description }),
-            ...(i.base && { base: i.base }),
-          },
-        }),
-        ...(i.supporters.length > 0 && { supporters: i.supporters }),
-        ...(i.opposers.length > 0 && { opposers: i.opposers }),
-      })),
-    }),
+    body: JSON.stringify({ suggestions }),
   });
 
   if (!res.ok) {
@@ -250,26 +248,34 @@ for (let start = 0; start < queue.length; start += BATCH_SIZE) {
 
   const json = (await res.json()) as { results?: { status?: string; reason?: string }[] };
   const results = json.results ?? [];
+  const accepted = (r?: { status?: string }) =>
+    r?.status === "moderator_approved" || r?.status === "pending_review";
 
-  results.forEach((result, i) => {
-    const item = batch[i];
-    const status = result.status ?? "no result";
-    tally[status] = (tally[status] ?? 0) + 1;
+  let offset = 0;
+  let acceptedItems = 0;
+  for (const item of batch) {
+    const mine = results.slice(offset, offset + item.words.length);
+    offset += item.words.length;
 
-    if (status === "moderator_approved" || status === "pending_review") {
+    item.words.forEach((word, i) => {
+      const status = mine[i]?.status ?? "no result";
+      tally[status] = (tally[status] ?? 0) + 1;
+      if (!accepted(mine[i])) {
+        console.log(`  ${word} (${item.action}): ${status}${mine[i]?.reason ? ` — ${mine[i].reason}` : ""}`);
+      }
+    });
+
+    // Every spelling or none: a word listed twice is still playable while one
+    // listing survives, so half a removal is not a delivery. Left unmarked on
+    // purpose — a skip is a decision worth seeing again rather than something
+    // to quietly file as done.
+    if (item.words.every((_, i) => accepted(mine[i]))) {
+      acceptedItems++;
       const now = new Date().toISOString();
       for (const id of item.ids) markDelivered.run(now, id);
-    } else {
-      // Left unmarked on purpose: a skip is a decision worth seeing again
-      // rather than something to quietly file as done.
-      console.log(`  ${item.word} (${item.action}): ${status}${result.reason ? ` — ${result.reason}` : ""}`);
     }
-  });
-
-  const accepted = results.filter(
-    (r) => r.status === "moderator_approved" || r.status === "pending_review",
-  ).length;
-  console.log(`  accepted ${accepted}/${batch.length}`);
+  }
+  console.log(`  accepted ${acceptedItems}/${batch.length}`);
 }
 
 console.log("\n── totals ──");
