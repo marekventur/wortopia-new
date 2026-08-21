@@ -87,6 +87,56 @@ try {
   check("recorded as delivered", typeof okRow.synced_to_spielwoerter_at === "string", JSON.stringify(okRow));
   check("and logged as accepted", delivered().length === 1, JSON.stringify(delivered()));
 
+  say(`${C.bold}votes travel with the suggestion${C.reset}`);
+  sent.length = 0;
+  const voters = [];
+  for (let i = 0; i < 3; i++) {
+    voters.push(Number(db.prepare("INSERT INTO users (name) VALUES (?)").run(`Waehler${i}`).lastInsertRowid));
+  }
+  {
+    const p = server.propose(userId, "Melderin", "sechstwort", "add", "beschreibung", null, 4);
+    const vote = db.prepare("INSERT INTO word_proposal_votes (proposal_id, user_id, vote) VALUES (?, ?, ?)");
+    vote.run(p.id, voters[0], "support");
+    vote.run(p.id, voters[1], "support");
+    vote.run(p.id, voters[2], "oppose");
+    // A stray self-vote: the API rejects the whole item if the author appears.
+    vote.run(p.id, userId, "support");
+    db.prepare("UPDATE word_proposals SET closes_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(p.id);
+    server.getProposals();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const item = sent[0]?.body.suggestions[0];
+  check("supporters are sent", JSON.stringify(item?.supporters) === JSON.stringify([`user-${voters[0]}@wortopia.de`, `user-${voters[1]}@wortopia.de`]),
+    JSON.stringify(item?.supporters));
+  check("opposers are sent", JSON.stringify(item?.opposers) === JSON.stringify([`user-${voters[2]}@wortopia.de`]),
+    JSON.stringify(item?.opposers));
+  check("the author is never listed as a voter",
+    ![...(item?.supporters ?? []), ...(item?.opposers ?? [])].includes(`user-${userId}@wortopia.de`),
+    JSON.stringify(item));
+
+  say(`${C.bold}no votes at all${C.reset}`);
+  sent.length = 0;
+  await finalize("siebtwort");
+  const bare = sent[0]?.body.suggestions[0];
+  check("the fields are omitted rather than sent empty",
+    !("supporters" in (bare ?? {})) && !("opposers" in (bare ?? {})), JSON.stringify(bare));
+
+  say(`${C.bold}more voters than the API accepts${C.reset}`);
+  sent.length = 0;
+  {
+    const p = server.propose(userId, "Melderin", "achtwort", "add", "beschreibung", null, 4);
+    const vote = db.prepare("INSERT INTO word_proposal_votes (proposal_id, user_id, vote) VALUES (?, ?, ?)");
+    for (let i = 0; i < 60; i++) {
+      const id = Number(db.prepare("INSERT INTO users (name) VALUES (?)").run(`Menge${i}`).lastInsertRowid);
+      vote.run(p.id, id, "support");
+    }
+    db.prepare("UPDATE word_proposals SET closes_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(p.id);
+    server.getProposals();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  check("capped at 50", sent[0]?.body.suggestions[0].supporters.length === 50,
+    String(sent[0]?.body.suggestions[0].supporters?.length));
+
   say(`${C.bold}silently skipped — the case that used to vanish${C.reset}`);
   respond = () => new Response(JSON.stringify({ results: [{ status: "skipped", reason: "blocked" }] }), { status: 200 });
   const skippedRow = await finalize("zweitwort");

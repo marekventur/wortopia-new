@@ -19,6 +19,9 @@ const VOTE_WINDOW_MINUTES = 30;
 const CHAT_HISTORY_MESSAGES = 100;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
+/** The API rejects a suggestion carrying more than this many voters per side. */
+const MAX_VOTERS_PER_SIDE = 50;
+
 const SPIELWOERTER_API_URL = "https://spielwoerter.de/api/partner/suggestions";
 
 type ProposalRow = {
@@ -36,6 +39,15 @@ type ProposalRow = {
   supporter_count: number;
   opposer_count: number;
 };
+
+/**
+ * How a wortopia player is named to spielwoerter.de. Synthetic and stable: the
+ * far side links or creates an account from it, so the same player must always
+ * map to the same address.
+ */
+export function partnerEmail(userId: number): string {
+  return `user-${userId}@wortopia.de`;
+}
 
 function rowToProposal(row: ProposalRow): Proposal {
   return {
@@ -294,6 +306,33 @@ export class WordProposalServer extends EventEmitter {
   }
 
 
+
+  /**
+   * The people who voted, as spielwoerter.de wants them.
+   *
+   * Their votes were already being counted here to decide the local status, but
+   * were never passed on — so every suggestion arrived with net support 0 and
+   * went into the human moderation queue, however many players had backed it.
+   * Two net supporters is all it takes to be applied automatically.
+   *
+   * The filtering is not paranoia, it is the API's validation rules: the author
+   * may not appear on either side, and neither side may exceed 50. Guests
+   * cannot vote, so a negative id would be a bug — dropped rather than sent.
+   */
+  private votersFor(row: ProposalRow): { supporters: string[]; opposers: string[] } {
+    const votes = getDb()
+      .prepare("SELECT user_id, vote FROM word_proposal_votes WHERE proposal_id = ?")
+      .all(row.id) as { user_id: number; vote: string }[];
+
+    const side = (vote: string) =>
+      votes
+        .filter((v) => v.vote === vote && v.user_id > 0 && v.user_id !== row.user_id)
+        .map((v) => partnerEmail(v.user_id))
+        .slice(0, MAX_VOTERS_PER_SIDE);
+
+    return { supporters: side("support"), opposers: side("oppose") };
+  }
+
   /**
    * Hands one finalized proposal to spielwoerter.de.
    *
@@ -316,6 +355,8 @@ export class WordProposalServer extends EventEmitter {
       return;
     }
 
+    const { supporters, opposers } = this.votersFor(row);
+
     try {
       const res = await fetch(SPIELWOERTER_API_URL, {
         method: "POST",
@@ -325,13 +366,15 @@ export class WordProposalServer extends EventEmitter {
             {
               word: row.word,
               action,
-              author_email: `user-${row.user_id}@wortopia.de`,
+              author_email: partnerEmail(row.user_id),
               ...(action === "upsert" && {
                 payload: {
                   ...(row.description && { description: row.description }),
                   ...(row.base && { base: row.base }),
                 },
               }),
+              ...(supporters.length > 0 && { supporters }),
+              ...(opposers.length > 0 && { opposers }),
             },
           ],
         }),
@@ -354,7 +397,10 @@ export class WordProposalServer extends EventEmitter {
         getDb()
           .prepare("UPDATE word_proposals SET synced_to_spielwoerter_at = ? WHERE id = ?")
           .run(new Date().toISOString(), row.id);
-        console.log(`[WordProposalServer] ${label} accepted: ${result.status}`);
+        console.log(
+          `[WordProposalServer] ${label} accepted: ${result.status}` +
+            ` (${supporters.length} for, ${opposers.length} against)`,
+        );
       } else {
         console.error(
           `[WordProposalServer] ${label} not accepted: ${result?.status ?? "no result"}` +
