@@ -47,7 +47,7 @@ const vite = await createServer({ root: ROOT, server: { middlewareMode: true }, 
 // A list big enough to clear the truncation guard, which refuses anything under
 // a thousand words once the database holds some.
 const filler = Array.from({ length: 1200 }, (_, i) => `wort${i},,Beschreibung ${i}`);
-const listCsv = [
+let listCsv = [
   "word,base,description",
   "öffnen,,aufmachen",
   "abbeisse,,ein Stück abbeissen",
@@ -121,7 +121,45 @@ try {
   check("the new version is pulled", fetched.csv === before + 1, String(fetched.csv));
   check("and recorded", lastLog().version === "2-bbb", JSON.stringify(lastLog()));
 
+  say(`${C.bold}what the list drops, the game drops${C.reset}`);
+  // Deletions were the complaint that started all this: a word removed from the
+  // list in May was still playable in August. The sync writes differences now,
+  // so "only ever adds" is exactly the bug worth guarding against.
+  listCsv = [
+    "word,base,description",
+    "abbeisse,,ein Stück abbeissen",
+    "neuwort,,frisch dazugekommen",
+    ...filler.slice(0, 1199),
+    "wort1199,,jetzt anders beschrieben",
+  ].join("\n");
+  version = "3-ccc";
+  await pollForChanges();
+  check("a word gone from the list stops being playable",
+    db.prepare("SELECT 1 FROM words WHERE word = 'oeffnen'").get() === undefined);
+  check("and its spelling goes with it", spellingsOf("oeffnen").length === 0,
+    JSON.stringify(spellingsOf("oeffnen")));
+  check("a spelling that was dropped stops counting",
+    JSON.stringify(spellingsOf("abbeisse")) === JSON.stringify(["abbeisse"]),
+    JSON.stringify(spellingsOf("abbeisse")));
+  check("a new word arrives", db.prepare("SELECT 1 FROM words WHERE word = 'neuwort'").get() !== undefined);
+  check("a changed description is written",
+    db.prepare("SELECT description FROM words WHERE word = 'wort1199'").get().description === "jetzt anders beschrieben",
+    JSON.stringify(db.prepare("SELECT description FROM words WHERE word = 'wort1199'").get()));
+  check("and the count is what the list said", lastLog().word_count === 1202, JSON.stringify(lastLog()));
+
+  say(`${C.bold}a truncated feed${C.reset}`);
+  listCsv = ["word,base,description", "abbeisse,,ein Stück abbeissen"].join("\n");
+  version = "4-ddd";
+  const kept = db.prepare("SELECT COUNT(*) AS c FROM words").get().c;
+  await pollForChanges();
+  check("is refused rather than applied",
+    db.prepare("SELECT COUNT(*) AS c FROM words").get().c === kept, String(kept));
+  check("and says so", logs.some((l) => l.includes("Refusing to sync")));
+
   say(`${C.bold}a version string that stops moving${C.reset}`);
+  // Back to a list worth having: the previous check left a truncated one, which
+  // is refused and would make this look like a scheduling failure.
+  listCsv = ["word,base,description", "abbeisse,,ein Stück abbeissen", ...filler].join("\n");
   db.prepare("UPDATE word_sync_log SET synced_at = '2020-01-01T00:00:00.000Z'").run();
   const syncs = syncCount();
   await pollForChanges();

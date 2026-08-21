@@ -62,59 +62,149 @@ function parseCSVLine(line: string): string[] {
 // Sync logic
 // ---------------------------------------------------------------------------
 
+/**
+ * Let the game have the thread back.
+ *
+ * better-sqlite3 is synchronous and this process is the game: every millisecond
+ * spent here is a millisecond nobody's guess is being scored. Rewriting the
+ * whole dictionary took 3.8 seconds of that in one unbroken block, which was
+ * survivable at 03:00 and is not survivable now the list is pulled whenever a
+ * moderator approves something. So the work is done in slices, with the loop
+ * free in between: the same total, none of it noticeable.
+ */
+const SLICE = 2_000;
+const breathe = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+type WordRow = { word: string; description: string | null };
+type Listing = { rows: WordRow[]; spellings: { word: string; spelling: string }[] };
+
+/**
+ * The list as spielwoerter.de sends it, parsed as it arrives.
+ *
+ * Read in chunks rather than as one string: the response is twelve megabytes,
+ * and decoding that in a single call blocks the game for about a tenth of a
+ * second on its own — more than everything else here put together. A chunk is
+ * a few hundred lines, and the read between chunks is a natural breath.
+ */
+async function fetchList(): Promise<Listing> {
+  const res = await fetch(WORDS_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.body) throw new Error("no response body");
+
+  const rows: WordRow[] = [];
+  const spellings: { word: string; spelling: string }[] = [];
+  const seen = new Set<string>();
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let carry = "";
+  let lineNo = 0;
+
+  const take = (line: string) => {
+    // The header row names the columns and is not a word.
+    if (lineNo++ === 0) return;
+    if (line.trim() === "") return;
+
+    const fields = parseCSVLine(line);
+    const rawWord = fields[0]?.trim();
+    if (!rawWord) return;
+
+    const normalized = normalizeWord(rawWord);
+    if (!normalized) return;
+
+    // Every spelling the list uses, keyed by the word the board can hold. The
+    // collisions used to be dropped on the floor; they are the whole point
+    // here, because a word listed as both "abbeisse" and "abbeiße" stays
+    // playable until both are gone, and only this table can say so.
+    spellings.push({ word: normalized, spelling: rawWord.toLowerCase() });
+
+    // One playable word per spelling collision: the board cannot tell them
+    // apart, so the first description wins.
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+
+    rows.push({ word: normalized, description: fields[2]?.trim() || null });
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    carry += decoder.decode(value, { stream: true });
+    const lines = carry.split("\n");
+    carry = lines.pop() ?? ""; // the last one may be half a line
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0 && i % SLICE === 0) await breathe();
+      take(lines[i]);
+    }
+  }
+  carry += decoder.decode();
+  if (carry !== "") take(carry);
+
+  return { rows, spellings };
+}
+
+/**
+ * What the game currently holds, in slices.
+ *
+ * Paged by key rather than iterated: an open better-sqlite3 iterator locks the
+ * connection, and handing the thread back mid-iteration would make the next
+ * chat message or score write throw.
+ */
+async function readCurrent(): Promise<{ words: Map<string, string | null>; spellings: Set<string> }> {
+  const db = getDb();
+  const words = new Map<string, string | null>();
+  const spellings = new Set<string>();
+
+  const wordPage = db.prepare(
+    "SELECT word, description FROM words WHERE word > ? ORDER BY word LIMIT ?",
+  );
+  for (let after = ""; ; ) {
+    const page = wordPage.all(after, SLICE) as WordRow[];
+    if (page.length === 0) break;
+    for (const row of page) words.set(row.word, row.description);
+    after = page[page.length - 1].word;
+    await breathe();
+  }
+
+  const spellingPage = db.prepare(
+    "SELECT word, spelling FROM word_spellings WHERE (word, spelling) > (?, ?) ORDER BY word, spelling LIMIT ?",
+  );
+  for (let afterWord = "", afterSpelling = ""; ; ) {
+    const page = spellingPage.all(afterWord, afterSpelling, SLICE) as {
+      word: string;
+      spelling: string;
+    }[];
+    if (page.length === 0) break;
+    for (const row of page) spellings.add(`${row.word}\u0000${row.spelling}`);
+    afterWord = page[page.length - 1].word;
+    afterSpelling = page[page.length - 1].spelling;
+    await breathe();
+  }
+
+  return { words, spellings };
+}
+
 export async function syncWords(version: string | null = null): Promise<void> {
   console.log("[wordSync] Starting word sync from", WORDS_URL);
 
-  let text: string;
+  let rows: WordRow[];
+  let spellings: { word: string; spelling: string }[];
   try {
-    const res = await fetch(WORDS_URL, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    text = await res.text();
+    ({ rows, spellings } = await fetchList());
   } catch (err) {
     console.error("[wordSync] Fetch failed, skipping sync:", err);
     return;
   }
 
-  const lines = text.split("\n");
-  // Skip header row
-  const dataLines = lines.slice(1).filter(l => l.trim() !== "");
-
-  type WordRow = { word: string; description: string | null };
-  const rows: WordRow[] = [];
-  const seen = new Set<string>();
-  // Every spelling the list uses, keyed by the word the board can hold. The
-  // collisions used to be dropped on the floor; they are the whole point here,
-  // because a word listed as both "abbeisse" and "abbeiße" stays playable until
-  // both are gone, and only this table can say so.
-  const spellings: { word: string; spelling: string }[] = [];
-
-  for (const line of dataLines) {
-    const fields = parseCSVLine(line);
-    const rawWord = fields[0]?.trim();
-    if (!rawWord) continue;
-
-    const normalized = normalizeWord(rawWord);
-    if (!normalized) continue;
-
-    spellings.push({ word: normalized, spelling: rawWord.toLowerCase() });
-
-    // One playable word per spelling collision: the board cannot tell them
-    // apart, so the first description wins.
-    if (seen.has(normalized)) continue;
-    seen.add(normalized);
-
-    const description = fields[2]?.trim() || null;
-    rows.push({ word: normalized, description });
-  }
-
   const db = getDb();
+  const held = await readCurrent();
 
-  // Sanity check before destroying the existing dictionary.
-  const { current } = db.prepare("SELECT COUNT(*) AS current FROM words").get() as {
-    current: number;
-  };
+  // Sanity check before touching the existing dictionary. The count comes from
+  // what was just read rather than a COUNT(*), which is a single statement over
+  // 194,000 rows and cannot be sliced — on a cold page cache it was the one
+  // thing here that still blocked the game for a tenth of a second.
+  const current = held.words.size;
   const floor = Math.max(MIN_ABSOLUTE_WORDS, Math.floor(current * MIN_SHRINK_RATIO));
   if (current > 0 && rows.length < floor) {
     console.error(
@@ -124,32 +214,82 @@ export async function syncWords(version: string | null = null): Promise<void> {
     return;
   }
 
-  db.transaction(() => {
-    db.exec("DELETE FROM words");
-    db.exec("DELETE FROM word_spellings");
-
-    const insert = db.prepare(
-      "INSERT OR IGNORE INTO words (word, accepted, description) VALUES (?, 1, ?)"
-    );
-    for (const { word, description } of rows) {
-      insert.run(word, description);
+  // ── What actually changed ─────────────────────────────────────────────────
+  // Usually a handful of words: the list moves when a moderator decides
+  // something, not by the thousand. Writing only the difference is what keeps
+  // the transaction — the one part that cannot be sliced, because the game must
+  // never see half a dictionary — down to a few milliseconds.
+  const upserts: WordRow[] = [];
+  const wanted = new Set<string>();
+  for (let i = 0; i < rows.length; i++) {
+    if (i % SLICE === 0) await breathe();
+    const row = rows[i];
+    wanted.add(row.word);
+    if (!held.words.has(row.word) || held.words.get(row.word) !== row.description) {
+      upserts.push(row);
     }
+  }
+
+  const removals: string[] = [];
+  let seenWords = 0;
+  for (const word of held.words.keys()) {
+    if (++seenWords % SLICE === 0) await breathe();
+    if (!wanted.has(word)) removals.push(word);
+  }
+
+  const spellingInserts: { word: string; spelling: string }[] = [];
+  const wantedSpellings = new Set<string>();
+  for (let i = 0; i < spellings.length; i++) {
+    if (i % SLICE === 0) await breathe();
+    const key = `${spellings[i].word}\u0000${spellings[i].spelling}`;
+    if (wantedSpellings.has(key)) continue; // the list may repeat a row
+    wantedSpellings.add(key);
+    if (!held.spellings.has(key)) spellingInserts.push(spellings[i]);
+  }
+
+  const spellingRemovals: string[] = [];
+  let seenSpellings = 0;
+  for (const key of held.spellings) {
+    if (++seenSpellings % SLICE === 0) await breathe();
+    if (!wantedSpellings.has(key)) spellingRemovals.push(key);
+  }
+
+  const touched =
+    upserts.length + removals.length + spellingInserts.length + spellingRemovals.length;
+
+  db.transaction(() => {
+    const insert = db.prepare(
+      "INSERT OR REPLACE INTO words (word, accepted, description) VALUES (?, 1, ?)",
+    );
+    for (const { word, description } of upserts) insert.run(word, description);
+
+    const remove = db.prepare("DELETE FROM words WHERE word = ?");
+    for (const word of removals) remove.run(word);
 
     const insertSpelling = db.prepare(
-      "INSERT OR IGNORE INTO word_spellings (word, spelling) VALUES (?, ?)"
+      "INSERT OR IGNORE INTO word_spellings (word, spelling) VALUES (?, ?)",
     );
-    for (const { word, spelling } of spellings) {
-      insertSpelling.run(word, spelling);
+    for (const { word, spelling } of spellingInserts) insertSpelling.run(word, spelling);
+
+    const removeSpelling = db.prepare(
+      "DELETE FROM word_spellings WHERE word = ? AND spelling = ?",
+    );
+    for (const key of spellingRemovals) {
+      const [word, spelling] = key.split("\u0000");
+      removeSpelling.run(word, spelling);
     }
 
-    db.prepare(
-      "INSERT INTO word_sync_log (word_count, version) VALUES (?, ?)"
-    ).run(rows.length, version);
+    db.prepare("INSERT INTO word_sync_log (word_count, version) VALUES (?, ?)").run(
+      rows.length,
+      version,
+    );
   })();
 
   console.log(
     `[wordSync] Synced ${rows.length} words (${spellings.length} spellings)` +
-      (version ? ` at ${version}` : ""),
+      (version ? ` at ${version}` : "") +
+      `: ${upserts.length} changed, ${removals.length} gone` +
+      (touched === 0 ? " — nothing to write" : ""),
   );
 }
 

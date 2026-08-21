@@ -18,8 +18,12 @@ import { getDb } from "./db.js";
 
 /** How a listed spelling becomes a word the board can hold. */
 export function normalizeWord(word: string): string {
-  return word
-    .toLowerCase()
+  const lower = word.toLowerCase();
+  // Five out of six words have nothing to replace, and this runs 195,000 times
+  // per sync — so look before doing the work.
+  if (!/[äöüß]/.test(lower)) return lower;
+
+  return lower
     .replace(/ä/g, "ae")
     .replace(/ö/g, "oe")
     .replace(/ü/g, "ue")
