@@ -13,8 +13,10 @@ export async function sendOtpEmail(to: string, code: string, siteUrl: string): P
   await client.messages.create(MAILGUN_DOMAIN, {
     from: FROM_ADDRESS,
     to,
-    subject: `Dein Wortopia-Code: ${code}`,
-    text: `Dein Wortopia-Code lautet: ${code}\n\nDer Code ist 10 Minuten gültig.\n\n${siteUrl}`,
-    html: `<p>Dein Wortopia-Code lautet:</p><p style="font-size:2em;font-weight:bold;letter-spacing:0.2em">${code}</p><p>Der Code ist 10 Minuten gültig.</p>`,
+    // Code first, next to "Anmeldecode", and alone in its own element below:
+    // the shape Gmail's mobile apps recognise for their "Copy code" shortcut.
+    subject: `${code} ist dein Wortopia-Anmeldecode`,
+    text: `Dein Wortopia-Anmeldecode lautet: ${code}\n\nDer Code ist 10 Minuten gültig.\n\n${siteUrl}`,
+    html: `<p>Dein Wortopia-Anmeldecode lautet:</p><p style="font-size:2em;font-weight:bold;letter-spacing:0.2em">${code}</p><p>Der Code ist 10 Minuten gültig.</p>`,
   });
 }
